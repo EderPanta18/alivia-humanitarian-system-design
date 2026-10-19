@@ -4,7 +4,7 @@
 
 Los casos de uso describen las interacciones de los cuatro roles humanos de Alivía con el sistema, incluyendo sus objetivos, flujos principales, alternativas y resultados.
 
-Los procesos internos, como matching, actualización de inventario, generación de documentos e importación de datos externos, se ejecutan como parte de estas operaciones y no constituyen actores humanos.
+Los procesos internos, como matching, actualización de inventario, generación de documentos e ingesta de datos externos, se ejecutan por comandos o eventos del sistema y no constituyen nuevos actores humanos.
 
 Los identificadores utilizan los siguientes prefijos:
 
@@ -40,7 +40,7 @@ Los identificadores utilizan los siguientes prefijos:
 
 **Resultado:** solicitud confirmada, sin comprometer inventario. No puede editarse ni cancelarse posteriormente por el jefe.
 
-### CU-COM-03. Consultar estado de solicitud propia
+### CU-COM-02. Consultar estado de solicitud propia
 
 **Objetivo:** conocer la cobertura y el progreso de atención de una solicitud.
 
@@ -54,7 +54,7 @@ Los identificadores utilizan los siguientes prefijos:
 
 **Resultado:** información consultada sin modificar registros.
 
-### CU-COM-04. Confirmar recepción
+### CU-COM-03. Confirmar recepción
 
 **Objetivo:** verificar y confirmar la ayuda recibida de un despacho.
 
@@ -66,28 +66,28 @@ Los identificadores utilizan los siguientes prefijos:
 2. Verifica físicamente la carga.
 3. Registra las cantidades recibidas y conformes por línea.
 4. Confirma la recepción.
-5. El sistema finaliza el registro y genera el manifiesto Excel y el acta PDF.
+5. El sistema finaliza la recepción y desencadena la generación posterior del manifiesto XLSX y el acta PDF.
 
-**Alternativas:** se rechazan despachos ajenos, sin llegada registrada o con cantidades incoherentes. Las discrepancias se gestionan mediante `CU-COM-05`.
+**Alternativas:** se rechazan despachos ajenos, sin llegada registrada o con cantidades incoherentes. Las discrepancias se gestionan mediante `CU-COM-04`.
 
-**Resultado:** recepción finalizada una sola vez por despacho.
+**Resultado:** recepción finalizada una sola vez por despacho. Los errores de generación documental no revierten su confirmación.
 
-### CU-COM-05. Registrar recepción con discrepancias
+### CU-COM-04. Registrar recepción con discrepancias
 
 **Objetivo:** documentar faltantes o productos no conformes durante la recepción.
 
-**Precondición:** discrepancias detectadas al ejecutar `CU-COM-04`.
+**Precondición:** discrepancias detectadas al ejecutar `CU-COM-03`.
 
 **Flujo principal:**
 
 1. Registra las cantidades físicamente recibidas y conformes.
 2. Identifica faltantes, daños y observaciones por línea.
 3. Confirma la recepción con observaciones.
-4. El sistema registra las discrepancias internamente y genera los documentos del despacho.
+4. El sistema registra las discrepancias internamente y desencadena la generación posterior de los documentos del despacho.
 
 **Alternativas:** las cantidades inconsistentes requieren corrección; si no existen discrepancias, se utiliza la confirmación conforme.
 
-**Resultado:** recepción finalizada como `WITH_OBSERVATIONS`, sin reactivar automáticamente el matching por las cantidades faltantes o no conformes.
+**Resultado:** recepción finalizada como `WITH_OBSERVATIONS`, sin reactivar automáticamente el matching por las cantidades faltantes o no conformes y sin exigir resolver la discrepancia para concluirla.
 
 ## 3. Jefe de ONG
 
@@ -202,7 +202,7 @@ Los identificadores utilizan los siguientes prefijos:
 
 **Resultado:** información del despacho disponible para coordinar el retiro.
 
-### CU-BRI-03. Consultar ruta de un despacho
+### CU-BRI-02. Consultar ruta de un despacho
 
 **Objetivo:** obtener una ruta evaluada antes de retirar la ayuda.
 
@@ -218,7 +218,23 @@ Los identificadores utilizan los siguientes prefijos:
 
 **Resultado:** ruta verificada o indisponibilidad registrada, sin garantizar transitabilidad física.
 
-### CU-BRI-05. Verificar y confirmar retiro completo
+### CU-BRI-03. Registrar llegada al destino
+
+**Objetivo:** dejar constancia de la llegada del despacho transportado.
+
+**Precondición:** retiro completo confirmado y despacho asignado.
+
+**Flujo principal:**
+
+1. Selecciona el despacho en traslado.
+2. Confirma su llegada al destino.
+3. El sistema registra responsable, fecha y hora.
+
+**Alternativas:** se rechazan llegadas duplicadas o correspondientes a despachos ajenos.
+
+**Resultado:** llegada registrada y recepción comunitaria habilitada, sin asumir conformidad de los productos.
+
+### CU-BRI-04. Verificar y confirmar retiro completo
 
 **Objetivo:** comprobar que la carga entregada por la ONG coincide íntegramente con lo autorizado.
 
@@ -235,37 +251,22 @@ Los identificadores utilizan los siguientes prefijos:
 
 **Resultado:** retiro completo confirmado con descuento físico y trazabilidad.
 
-### CU-BRI-04. Registrar llegada al destino
-
-**Objetivo:** dejar constancia de la llegada del despacho transportado.
-
-**Precondición:** retiro completo confirmado y despacho asignado.
-
-**Flujo principal:**
-
-1. Selecciona el despacho en traslado.
-2. Confirma su llegada al destino.
-3. El sistema registra responsable, fecha y hora.
-
-**Alternativas:** se rechazan llegadas duplicadas o correspondientes a despachos ajenos.
-
-**Resultado:** llegada registrada y recepción comunitaria habilitada, sin asumir conformidad de los productos.
-
 ## 5. Jefe de Defensa Civil
 
-### CU-DC-01. Consultar riesgo territorial
+### CU-DC-01. Consultar riesgo territorial y alertas recientes
 
-**Objetivo:** conocer las evaluaciones de riesgo por comunidad y tipo de desastre.
+**Objetivo:** conocer las evaluaciones de riesgo y las observaciones o alertas recientes disponibles por comunidad y fenómeno.
 
 **Flujo principal:**
 
-1. Accede al mapa territorial.
-2. Selecciona una comunidad o zona.
-3. Consulta el desastre, nivel de riesgo, fuente y fecha de evaluación.
+1. Accede al mapa territorial y consulta las observaciones y alertas recientes disponibles.
+2. Filtra por fenómeno, fuente o fecha y selecciona una comunidad, zona u observación georreferenciable.
+3. Visualiza fenómeno, ubicación, fuente, fecha y certeza de la observación, junto con el nivel de riesgo evaluado cuando exista.
+4. Distingue los datos observados, estimados o no verificados de la atención humanitaria registrada.
 
-**Alternativas:** cuando faltan datos o son antiguos, se informa su condición sin atribuir niveles de riesgo no sustentados.
+**Alternativas:** si faltan datos, están desactualizados o no tienen ubicación fiable, se informa su condición sin inventar coordenadas ni atribuir niveles de riesgo no sustentados. La ausencia de una observación externa no impide consultar las evaluaciones disponibles.
 
-**Resultado:** evaluación consultada sin modificar información territorial.
+**Resultado:** información territorial y alertas consultadas en solo lectura, sin declarar emergencias, iniciar autorizaciones ni modificar el estado de atención.
 
 ### CU-DC-02. Consultar estado de atención y brechas
 
