@@ -1,0 +1,54 @@
+# Dependencias y compilación web
+node_modules/
+.pnpm-store/
+.next/
+.nuxt/
+.turbo/
+.cache/
+dist/
+build/
+coverage/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Resultados temporales de pruebas
+playwright-report/
+test-results/
+.blob-report/
+
+# Archivos temporales y registros
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Archivos temporales de Office
+~$*
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Secretos y configuración local
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Configuración local de herramientas
+/.serena/
