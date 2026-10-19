@@ -1,47 +1,74 @@
 # Plan de implementación técnica
 
-## 1. Estado y estrategia
+## 1. Estrategia de implementación
 
-Este documento define cómo construir la plataforma; no afirma que las funciones estén programadas. Se implementan incrementos verticales: capa de interfaz, contrato HTTP, caso de uso, reglas de dominio, persistencia y pruebas por capacidad. Los repositorios `frontend` y `backend` se mantienen separados y el contrato API es el vínculo técnico entre ambos.
+Alivía se desarrollará mediante incrementos verticales que integren interfaz, contrato HTTP, casos de uso, reglas de dominio, persistencia y pruebas.
 
-## 2. Stack y responsabilidades
+Los repositorios `frontend` y `backend` permanecen separados y se coordinan mediante contratos de API versionados.
 
-| Elemento | Tecnología | Aplicación |
-|---|---|---|
-| UI | Next.js, React, TypeScript | Vistas por rol, formularios, navegación, mapas. |
-| Componentes | shadcn/ui compatible con la versión elegida | Controles accesibles y reutilizables, sin reglas de dominio en componentes. |
-| API | NestJS, TypeScript | HTTP REST, sesiones, coordinación de casos de uso. |
-| Datos | PostgreSQL con Prisma | Migraciones, repositorios, restricciones y transacciones. |
-| Mapas | Leaflet + proveedor de teselas OSM | Capas, marcadores y recorridos visibles. |
-| Rutas | Adaptador a openrouteservice | Cálculo y respuesta tipada sin dependencia de dominio. |
-| Archivos | XLSX y PDF generados en servidor | Manifiesto/acta tras recepción validada. |
-| Calidad | Biome, TypeScript, Vitest/Jest, Supertest, Playwright | Formato, lint, tipos y verificación automatizada. |
+Este plan describe la construcción prevista y no implica que las funcionalidades estén implementadas.
+
+## 2. Stack tecnológico
+
+| Componente     | Tecnología                                            | Responsabilidad                                                  |
+| -------------- | ----------------------------------------------------- | ---------------------------------------------------------------- |
+| Frontend       | Next.js, React, TypeScript                            | Vistas por rol, formularios, navegación y mapas.                 |
+| Componentes UI | shadcn/ui compatible con la versión seleccionada      | Controles accesibles y reutilizables, sin lógica de dominio.     |
+| Backend        | NestJS, TypeScript                                    | API REST, autenticación, autorización y casos de uso.            |
+| Persistencia   | PostgreSQL, Prisma                                    | Repositorios, migraciones, restricciones y transacciones.        |
+| Cartografía    | Leaflet y proveedor de teselas OSM                    | Capas, marcadores y representación de recorridos.                |
+| Rutas          | Adaptador de openrouteservice                         | Cálculo de recorridos sin acoplar el dominio al proveedor.       |
+| Documentos     | Generación de XLSX y PDF en servidor                  | Manifiestos y actas posteriores a la recepción.                  |
+| Calidad        | Biome, TypeScript, Vitest/Jest, Supertest, Playwright | Formato, análisis estático, pruebas y verificación automatizada. |
 
 ## 3. Secuencia de construcción
 
-1. Preparar repositorios, entornos, migraciones y usuarios/catálogos de prueba.
-2. Implementar Identity y middleware/guards de rol y titularidad.
-3. Implementar Shelter: comunidades, solicitudes y líneas de productos.
-4. Implementar Inventory: entradas, FEFO, algoritmo de matching, confirmación y autorización atómica.
-5. Implementar Logistics: despachos, evaluación de rutas y retiro completo transaccional.
-6. Implementar Shelter: recepción conforme/con observaciones y cálculo de faltantes.
-7. Implementar generación idempotente de XLSX/PDF y acceso autorizado a archivos.
-8. Implementar Territory, adaptadores de observaciones y vistas de supervisión agregada.
-9. Implementar procesamiento del evento preconfigurado de cierre e informe final inmutable.
-10. Ejecutar validaciones funcionales y de seguridad antes de cualquier publicación.
+1. **Preparación:** configurar repositorios, entornos, migraciones y datos de prueba.
+2. **Identity:** implementar autenticación, sesiones y controles de rol y titularidad.
+3. **Shelter — solicitudes:** implementar comunidades, solicitudes y líneas de productos.
+4. **Inventory:** implementar entradas, selección FEFO, matching, confirmaciones y autorizaciones atómicas.
+5. **Logistics:** implementar despachos, verificación de rutas y retiro completo con descuento transaccional.
+6. **Shelter — recepciones:** registrar conformidad, observaciones y faltantes físicos.
+7. **Documentos:** generar XLSX/PDF de forma idempotente y habilitar su consulta autorizada.
+8. **Territory y supervisión:** implementar evaluaciones territoriales, adaptadores de observaciones y consultas agregadas.
+9. **Cierre:** procesar el evento preconfigurado de finalización y generar el informe consolidado inmutable.
+10. **Verificación:** ejecutar pruebas funcionales, de integración y seguridad antes de publicar.
 
-## 4. Organización interna de módulos
+Cada etapa debe producir capacidades verificables sin comprometer la consistencia de las operaciones existentes.
 
-Cada módulo backend se divide conceptualmente en `entrypoints` (HTTP y tareas), `application` (casos de uso), `domain` (reglas, modelos e interfaces) e `infrastructure` (Prisma, adaptadores y almacenamiento). La ubicación física concreta de carpetas puede evolucionar sin alterar la arquitectura lógica. No se permite importación de repositorios privados de otros módulos.
+## 4. Organización del backend
 
-## 5. Configuración del entorno
+El backend utiliza un monolito modular con las siguientes capas:
 
-- Node.js LTS compatible con las versiones seleccionadas; gestor pnpm.
-- PostgreSQL local para desarrollo y base administrada para producción propuesta.
-- Configuración mediante variables `DATABASE_URL`, `SESSION_SECRET`, `MAP_PROVIDER_KEY`, `SOURCE_API_KEYS`, `APP_ORIGIN` y endpoints externos.
-- Secretos fuera de Git, ejemplos `.env.example` sin credenciales y validación de configuración al iniciar servicio.
-- Los datos de prueba tienen nombres ficticios y nunca se mezclan con registros de organizaciones reales.
+| Capa             | Responsabilidad                                                 |
+| ---------------- | --------------------------------------------------------------- |
+| `entrypoints`    | Entradas HTTP y procesamiento de tareas.                        |
+| `application`    | Coordinación de casos de uso y contratos entre módulos.         |
+| `domain`         | Reglas de negocio, modelos e interfaces.                        |
+| `infrastructure` | Persistencia con Prisma, adaptadores externos y almacenamiento. |
 
-## 6. Definición de terminado por incremento
+La estructura física de carpetas puede evolucionar sin modificar estas responsabilidades.
 
-Contrato probado, verificación de permisos de recurso, validaciones de cantidades, manejo de error/reintento, migración versionada cuando corresponda, vista accesible en móvil y comprobación de extremo a extremo del camino principal. El criterio se aplica incluso cuando el desarrollo sea incremental.
+Los módulos se comunican mediante contratos explícitos y no acceden directamente a repositorios ni implementaciones privadas de otros módulos.
+
+## 5. Configuración de entornos
+
+- **Runtime:** Node.js LTS compatible con las versiones seleccionadas y pnpm como gestor de paquetes.
+- **Base de datos:** PostgreSQL local para desarrollo y servicio administrado como propuesta para producción.
+- **Configuración:** variables de entorno como `DATABASE_URL`, `SESSION_SECRET`, `MAP_PROVIDER_KEY`, `SOURCE_API_KEYS`, `APP_ORIGIN` y direcciones de servicios externos.
+- **Secretos:** almacenamiento fuera de Git, archivos `.env.example` sin credenciales y validación de configuración al iniciar.
+- **Datos de prueba:** registros ficticios, separados de la información de organizaciones reales.
+
+## 6. Criterios de finalización por incremento
+
+Cada capacidad se considera terminada cuando cumple los criterios aplicables:
+
+- Contratos de API implementados y probados.
+- Autenticación, autorización y titularidad verificadas.
+- Reglas de dominio y validaciones de cantidades comprobadas.
+- Errores, conflictos y reintentos gestionados correctamente.
+- Migraciones versionadas cuando existan cambios de persistencia.
+- Interfaz accesible y funcional en dispositivos móviles.
+- Flujo principal validado mediante pruebas de extremo a extremo.
+
+Estos criterios se aplican a cada incremento, sin posponer las verificaciones esenciales hasta el final del proyecto.

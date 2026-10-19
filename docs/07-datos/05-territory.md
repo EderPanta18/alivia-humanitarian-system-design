@@ -2,68 +2,99 @@
 
 ## 1. Responsabilidad
 
-Territory conserva el catálogo de tipos de desastre, la escala de niveles de riesgo y el historial de evaluaciones por comunidad. Adicionalmente registra observaciones externas importadas con procedencia y fecha. Los datos externos informan riesgo, pero no cambian automáticamente el estado formal de emergencia ni la situación de atención humanitaria.
+El módulo `Territory` administra el catálogo de tipos de desastre, los niveles de riesgo, las evaluaciones históricas por comunidad y las observaciones procedentes de fuentes externas.
 
-## 2. Modelo de datos
+La información territorial se mantiene independiente del estado de atención humanitaria. Las observaciones externas no declaran emergencias ni modifican automáticamente su estado formal.
+
+## 2. Modelo físico
 
 ```mermaid
 erDiagram
- territory_catastrophe ||--o{ territory_risk : identifica
- territory_catastrophe_level ||--o{ territory_risk : clasifica
- territory_observation ||--o{ territory_risk : sustenta
- territory_catastrophe {
-  uuid id PK
-  string code UK
-  string name
-  string description
-  boolean active
- }
- territory_catastrophe_level {
-  uuid id PK
-  string code UK
-  string name
-  int severity_order UK
-  string color_hex
-  string description
-  boolean active
- }
- territory_observation {
-  uuid id PK
-  string source
-  string external_id
-  string phenomenon
-  string certainty
-  jsonb payload
-  timestamptz observed_at
-  timestamptz ingested_at
- }
- territory_risk {
-  uuid id PK
-  uuid catastrophe_id FK
-  uuid catastrophe_level_id FK
-  uuid community_id "logico shelter"
-  uuid observation_id FK
-  string source
-  timestamptz assessed_at
-  timestamptz imported_at
- }
+    territory_catastrophe ||--o{ territory_risk : identifica
+    territory_catastrophe_level ||--o{ territory_risk : clasifica
+    territory_observation ||--o{ territory_risk : sustenta
+
+    territory_catastrophe {
+        uuid id PK
+        string code UK
+        string name
+        string description
+        boolean active
+    }
+
+    territory_catastrophe_level {
+        uuid id PK
+        string code UK
+        string name
+        int severity_order UK
+        string color_hex
+        string description
+        boolean active
+    }
+
+    territory_observation {
+        uuid id PK
+        string source
+        string external_id
+        string phenomenon
+        string certainty
+        jsonb payload
+        timestamptz observed_at
+        timestamptz ingested_at
+    }
+
+    territory_risk {
+        uuid id PK
+        uuid catastrophe_id FK
+        uuid catastrophe_level_id FK
+        uuid community_id "logico shelter"
+        uuid observation_id FK
+        string source
+        timestamptz assessed_at
+        timestamptz imported_at
+    }
 ```
 
-## 3. Catálogos y observaciones
+## 3. Restricciones de persistencia
 
-- `catastrophe`: clasificación independiente como sismo, inundación o deslizamiento; no se representa como texto libre por evaluación.
-- `catastrophe_level`: nivel, orden de severidad y color configurable. La escala común permite comparar niveles **dentro de un fenómeno**, no inferir equivalencia automática entre desastres distintos.
-- `observation`: `(source,external_id)` único cuando el proveedor entrega identificador; en caso contrario se usa una huella determinista de fuente, fenómeno y fecha. Conserva dato original limitado, fecha de observación, fecha de ingesta y atributo de certeza `OBSERVED`, `ESTIMATED`, `UNVERIFIED`.
-- `risk`: vincula comunidad lógica, fenómeno, nivel, fuente y fecha; `observation_id` puede ser nulo si el dato fue precargado por administración técnica.
+| Entidad                       | Restricciones                                                                                                                                                                                            |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `territory.catastrophe`       | Catálogo de fenómenos como sismos, inundaciones y deslizamientos, identificados mediante códigos únicos.                                                                                                 |
+| `territory.catastrophe_level` | Escala configurable con código, orden de severidad único y color de representación. Los niveles permiten comparar severidades dentro de un fenómeno, sin asumir equivalencia entre desastres diferentes. |
+| `territory.observation`       | Conserva fuente, fenómeno, contenido original limitado, certeza y fechas de observación e ingesta. Admite `OBSERVED`, `ESTIMATED` y `UNVERIFIED`.                                                        |
+| `territory.risk`              | Relaciona comunidad, tipo de desastre, nivel, fuente y fecha de evaluación. `observation_id` puede ser nulo para registros precargados por administración técnica.                                       |
 
-## 4. Vigencia y visualización
+Las observaciones deben evitar duplicados mediante `UNIQUE(source, external_id)` cuando exista un identificador del proveedor. En caso contrario, se utiliza una huella determinista basada en fuente, fenómeno y fecha.
 
-Una evaluación importada tardíamente no sustituye a otra evaluada más recientemente. Las capas del mapa se consultan por `community_id`, desastre, fuente y `assessed_at DESC`. Se muestran por separado riesgo territorial y avance humanitario. No existe un color de riesgo global único mezclando catástrofes heterogéneas. El estado de la carretera es dato logístico y no puede deducirse del nivel de riesgo de la comunidad.
+La referencia `risk.community_id` pertenece lógicamente a `Shelter` y se valida mediante contratos de aplicación, sin FK física entre módulos.
 
-## 5. Entrada de datos externos
+## 4. Vigencia y representación territorial
 
-Los adaptadores consumen fuentes con autorización y contratos comprobados; validan fecha, tipo, ubicación, duplicados y procedencia. CENSIS/IGP y SENAMHI son referencias oficiales para observaciones peruanas; NASA FIRMS puede aportar detecciones de focos de calor, no confirmaciones de incendios por sí solas. Datos sin ubicación fiable quedan registrados como observación no georreferenciable y no generan riesgo de comunidad ficticio.
+Las evaluaciones conservan su historial y se consultan por `community_id`, tipo de desastre, fuente y `assessed_at DESC`.
 
-## 6. Acceso
+Una evaluación importada tardíamente no reemplaza otra más reciente. La visualización debe cumplir las siguientes condiciones:
 
-Defensa Civil consulta vistas territoriales de solo lectura. Los catálogos y la importación los gestiona la administración técnica o el proceso autorizado de integración, no una pantalla editora de Defensa Civil. El modelo no contiene inventarios ni permite modificarlos por medio de esta consulta.
+- Identificar la fuente y fecha de cada evaluación.
+- Presentar los riesgos por fenómeno y fuente, sin consolidarlos en un único nivel global.
+- Representar el estado de atención humanitaria de forma independiente del riesgo territorial.
+- No deducir la transitabilidad de una carretera a partir del riesgo de una comunidad, ya que el estado vial pertenece a `Logistics`.
+
+## 5. Ingesta de información externa
+
+Los adaptadores deben utilizar fuentes con condiciones de acceso y uso verificadas, validando procedencia, fecha, fenómeno, ubicación y duplicados antes de incorporar sus datos.
+
+Las fuentes consideradas incluyen:
+
+- **CENSIS/IGP:** observaciones sísmicas.
+- **SENAMHI:** información meteorológica e hidrológica.
+- **NASA FIRMS:** detecciones de focos de calor, sin considerarlas confirmaciones automáticas de incendios.
+
+Las observaciones sin ubicación fiable se conservan como datos no georreferenciables y no generan evaluaciones de riesgo atribuidas a comunidades sin sustento.
+
+## 6. Control de acceso
+
+Defensa Civil dispone de consultas territoriales de solo lectura, sin permisos para modificar evaluaciones ni administrar fuentes externas.
+
+Los catálogos y las importaciones corresponden a la administración técnica o a procesos de integración autorizados.
+
+`Territory` no administra inventarios ni expone operaciones que permitan modificarlos.

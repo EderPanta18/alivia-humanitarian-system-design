@@ -1,68 +1,70 @@
 # Registro de decisiones arquitectónicas
 
-## 1. Convención
+## 1. Convenciones
 
-Cada entrada documenta una decisión de diseño ya elegida para la arquitectura de referencia: identificador `ADR-xxx`, decisión, contexto y consecuencia técnica. `Aceptada` significa aceptada **en la especificación**, no desplegada o verificada en producción. Sustituir una decisión exige conservar su historial y registrar la nueva decisión, sin modificar retrospectivamente los motivos.
+Este registro documenta las decisiones arquitectónicas de Alivía, identificadas mediante códigos `ADR-xxx`. Cada entrada establece la decisión adoptada, su justificación y sus consecuencias técnicas.
 
-## ADR-001. Aplicación modular en capas
+El estado `Aceptada` indica que la decisión forma parte del diseño de referencia, sin implicar que esté implementada o desplegada. Las decisiones sustituidas conservan su historial y se vinculan con las nuevas entradas que las reemplazan.
 
-- **Estado:** aceptada.
-- **Decisión:** backend NestJS monolítico modular en capas, con los cinco módulos funcionales separados por contratos.
-- **Motivo:** reutilización de lógica de negocio, despliegue sencillo y control de complejidad.
-- **Consecuencia:** ningún módulo accede directamente a tablas o implementaciones privadas de otro; la coordinación intermodular se hace con servicios/contratos.
+## ADR-001. Monolito modular en capas
 
-## ADR-002. Dos repositorios de aplicación
+- **Estado:** Aceptada.
+- **Decisión:** utilizar NestJS como backend monolítico modular, organizado en capas y con cinco módulos funcionales separados mediante contratos.
+- **Motivo:** facilitar la reutilización de lógica de negocio, las pruebas y el despliegue, manteniendo límites claros entre responsabilidades.
+- **Consecuencia:** los módulos se comunican mediante contratos y servicios definidos, sin acceder directamente a implementaciones o datos privados de otros módulos.
 
-- **Estado:** aceptada.
-- **Decisión:** frontend Next.js/React/TypeScript y backend NestJS/TypeScript en repositorios Git separados, con versionado independiente.
-- **Motivo:** permitir ciclos de construcción distintos sin duplicar la lógica de dominio.
-- **Consecuencia:** interfaz cliente-servidor explícita mediante API REST y esquemas tipados compatibles.
+## ADR-002. Repositorios independientes
 
-## ADR-003. PostgreSQL y Prisma
+- **Estado:** Aceptada.
+- **Decisión:** mantener el frontend con Next.js, React y TypeScript y el backend con NestJS y TypeScript en repositorios Git separados.
+- **Motivo:** permitir ciclos de desarrollo y versionado independientes, sin duplicar reglas de negocio.
+- **Consecuencia:** la comunicación entre aplicaciones utiliza una API REST con contratos y esquemas tipados compatibles.
 
-- **Estado:** aceptada.
-- **Decisión:** PostgreSQL administrado con schemas `identity`, `shelter`, `inventory`, `logistics` y `territory`, migraciones Prisma y restricciones SQL cuando ORM no alcance.
-- **Motivo:** transacciones, claves y relaciones necesarias para integridad de existencias y recepciones.
-- **Consecuencia:** referencias lógicas entre schemas se validan en comandos; las relaciones internas tienen FK físicas.
+## ADR-003. Persistencia con PostgreSQL y Prisma
 
-## ADR-004. REST como interfaz primaria
+- **Estado:** Aceptada.
+- **Decisión:** utilizar PostgreSQL administrado y Prisma para migraciones y acceso a datos, con los esquemas `identity`, `shelter`, `inventory`, `logistics` y `territory`. Las restricciones que Prisma no pueda expresar se implementan mediante SQL.
+- **Motivo:** garantizar la integridad de inventarios, autorizaciones y recepciones mediante transacciones y restricciones de persistencia.
+- **Consecuencia:** las relaciones internas utilizan claves foráneas físicas, mientras que las referencias entre esquemas se coordinan mediante identificadores lógicos y validaciones de aplicación.
 
-- **Estado:** aceptada.
-- **Decisión:** API JSON vía HTTPS; no usar GraphQL ni WebSocket como requisitos iniciales.
-- **Motivo:** las operaciones confirmadas son comandos discretos y consultas de estado con paginación.
-- **Consecuencia:** se admite consultar cambios mediante refresco; mensajería en tiempo real se agregará únicamente si aparece una necesidad demostrable.
+## ADR-004. API REST como interfaz principal
 
-## ADR-005. Propuestas sin reserva; autorización atómica
+- **Estado:** Aceptada.
+- **Decisión:** exponer una API JSON mediante HTTPS, sin incorporar GraphQL ni WebSocket como requisitos iniciales.
+- **Motivo:** las operaciones del sistema se basan principalmente en comandos explícitos y consultas de estado paginadas.
+- **Consecuencia:** las interfaces pueden actualizar información mediante consultas periódicas o refresco. La comunicación en tiempo real se incorporará únicamente si existe una necesidad justificada.
 
-- **Estado:** aceptada.
-- **Decisión:** la propuesta de matching no compromete stock; la autorización revalida inventario y cobertura y registra compromiso en una transacción.
-- **Motivo:** evitar doble asignación por propuestas en paralelo.
-- **Consecuencia:** la disponibilidad calcula stock físico utilizable menos autorizaciones aún no retiradas.
+## ADR-005. Autorización atómica sin reservas por propuesta
 
-## ADR-006. Fuentes externas como observaciones
+- **Estado:** Aceptada.
+- **Decisión:** las propuestas de matching no reservan inventario. La autorización revalida disponibilidad y cobertura antes de registrar el compromiso mediante una transacción atómica.
+- **Motivo:** impedir sobreasignaciones cuando varias propuestas o autorizaciones compiten por las mismas existencias.
+- **Consecuencia:** la disponibilidad para asignar se calcula restando del stock físico utilizable las cantidades autorizadas pendientes de retiro.
 
-- **Estado:** aceptada.
-- **Decisión:** adaptadores almacenan fuente, fecha, identificador, estado de certeza y dato normalizado; no declaran emergencias ni envían órdenes humanitarias.
-- **Motivo:** un dato observado no es automáticamente una declaración institucional.
-- **Consecuencia:** los procesos operativos requieren un contexto de emergencia validado y configurado por mecanismo autorizado.
+## ADR-006. Integración de fuentes externas como observaciones
 
-## ADR-007. Rutas con criterio conservador
+- **Estado:** Aceptada.
+- **Decisión:** incorporar datos externos mediante adaptadores que conserven identificador, fuente, fecha, estado de certeza y contenido normalizado, sin declarar emergencias ni ejecutar operaciones humanitarias automáticamente.
+- **Motivo:** distinguir la información observada de las decisiones institucionales.
+- **Consecuencia:** las operaciones requieren un escenario de emergencia previamente validado y configurado mediante un mecanismo autorizado.
 
-- **Estado:** aceptada.
-- **Decisión:** Leaflet para visualización; openrouteservice como candidato de cálculo; cerrar el paso ante vías `IMPASSABLE` o `UNKNOWN` y revalidar rutas vencidas a treinta minutos.
-- **Motivo:** una ruta dibujada no prueba transitabilidad real.
-- **Consecuencia:** sin evidencia vial suficientemente reciente el retiro queda bloqueado; el equipo operativo gestiona alternativas fuera de la plataforma.
+## ADR-007. Verificación conservadora de rutas
 
-## ADR-008. Despliegue administrado
+- **Estado:** Aceptada.
+- **Decisión:** utilizar Leaflet para visualización cartográfica y considerar openrouteservice como proveedor de cálculo de rutas. Se excluyen recorridos con tramos `IMPASSABLE` o `UNKNOWN`, y las verificaciones vencen a los treinta minutos.
+- **Motivo:** un recorrido calculado no garantiza que las vías permanezcan físicamente transitables.
+- **Consecuencia:** el retiro se bloquea cuando no existe una ruta válida y vigente. Las alternativas operativas se coordinan fuera de la plataforma.
 
-- **Estado:** aceptada como topología de referencia.
-- **Decisión:** Vercel para frontend, Render para servicio backend y Supabase PostgreSQL para persistencia.
-- **Motivo:** despliegues separados y menor carga operativa inicial.
-- **Consecuencia:** los planes de prototipo sin SLA no se considerarán apropiados para atención humanitaria de producción sin un servicio y garantías superiores.
+## ADR-008. Despliegue mediante servicios administrados
 
-## ADR-009. Registro inmutable de eventos críticos
+- **Estado:** Aceptada como topología de referencia.
+- **Decisión:** utilizar Vercel para el frontend, Render para el backend y Supabase PostgreSQL para la persistencia.
+- **Motivo:** simplificar la administración inicial y permitir despliegues independientes de las aplicaciones.
+- **Consecuencia:** los planes de prototipo sin garantías de disponibilidad no se consideran suficientes para una operación humanitaria real, que requiere infraestructura y acuerdos de servicio adecuados.
 
-- **Estado:** aceptada.
-- **Decisión:** acciones de solicitud, autorización, retiro, recepción y cierre dejan evento con identidad, tiempo, objeto y clave idempotente; las correcciones son entradas nuevas.
-- **Motivo:** reconstrucción comprobable de operaciones sin sobrescribir historia.
-- **Consecuencia:** el registro de auditoría no sustituye el estado transaccional de cada módulo.
+## ADR-009. Auditoría inmutable de operaciones críticas
+
+- **Estado:** Aceptada.
+- **Decisión:** registrar las operaciones críticas de solicitud, autorización, retiro, recepción y cierre mediante eventos con identidad del responsable, fecha, hora, recurso afectado y clave de idempotencia. Las correcciones generan nuevas entradas.
+- **Motivo:** permitir la reconstrucción de las operaciones sin alterar ni eliminar su historial.
+- **Consecuencia:** el registro de auditoría complementa el estado transaccional de cada módulo, sin sustituirlo.

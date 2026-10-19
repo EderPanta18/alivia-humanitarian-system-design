@@ -2,64 +2,96 @@
 
 ## 1. Alcance funcional de referencia
 
-Alivía contempla un escenario de emergencia activo, cuatro roles humanos y seis macroprocesos. La arquitectura se especifica para una implementación web con frontend y backend separados; los datos operativos iniciales pueden precargarse para la validación del sistema.
+Alivía contempla un escenario de emergencia activo, cuatro roles humanos y seis macroprocesos. Su arquitectura está diseñada para una aplicación web con frontend y backend separados. Para la validación inicial, los datos operativos pueden precargarse.
 
-| Área | Comportamiento incluido |
-|---|---|
-| Identidad | Inicio de sesión, rol único, jefe único por entidad y autorización del lado del servidor. |
-| Solicitudes | Comunidad identificada por la sesión; productos, población afectada, situación, validación y confirmación no cancelable. |
-| Matching | Cálculo de cobertura, filtro de lotes utilizables, prioridad determinista, FEFO y propuestas por ONG. |
-| ONG | Inventarios, movimientos, respuesta a propuestas, confirmación de cantidades y autorización posterior. |
-| Brigada | Consulta de despacho, disponibilidad de ruta, verificación del retiro completo y registro de llegada. |
-| Recepción | Comparación por línea, conformidad o cierre con observaciones; discrepancias internas. |
-| Documentos | Manifiesto de despacho Excel y acta de entrega PDF tras recepción finalizada. |
-| Territory | Riesgos históricos por desastre/comunidad, observaciones geográficas, fuente y fecha; mapas independientes de riesgo y atención. |
-| Defensa Civil | Consultas territoriales y de atención de solo lectura; informe consolidado únicamente al cierre configurado. |
-| Ingesta | Importación de observaciones y avisos externos, con procedencia y fecha; ningún reporte externo activa operaciones por sí solo. |
+| Área          | Comportamiento incluido                                                                                                                            |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Identidad     | Inicio de sesión, rol único por usuario, jefe único por entidad y autorización del lado del servidor.                                              |
+| Solicitudes   | Identificación de la comunidad mediante la sesión, registro de productos, población afectada y situación, validación y confirmación no cancelable. |
+| Matching      | Cálculo de cobertura, selección de lotes utilizables, prioridad determinista, criterio FEFO y generación de propuestas por ONG.                    |
+| ONG           | Gestión de inventarios y movimientos, respuesta a propuestas, confirmación de cantidades y autorización posterior.                                 |
+| Brigada       | Consulta de despachos, comprobación de rutas, verificación del retiro completo y registro de llegada.                                              |
+| Recepción     | Comparación por línea, cierre conforme o con observaciones y registro interno de discrepancias.                                                    |
+| Documentos    | Generación de manifiestos de despacho en Excel y actas de entrega en PDF después de finalizar la recepción.                                        |
+| Territorio    | Registro histórico de riesgos por desastre y comunidad, observaciones geográficas con fuente y fecha, y mapas independientes de riesgo y atención. |
+| Defensa Civil | Consulta de información territorial y de atención en modo de solo lectura; informe consolidado únicamente al cierre configurado.                   |
+| Ingesta       | Importación de observaciones y avisos externos con procedencia y fecha, sin activar operaciones automáticamente.                                   |
 
 ## 2. Límites operativos
 
-- Ámbito territorial inicial: Piura. El modelo admite otras localidades mediante datos, sin agregar reglas territoriales fijas.
-- Estado de emergencia: contexto activo configurado previamente por administración técnica. No hay interfaz para que los cuatro roles declaren o cierren emergencias.
-- Cierre del escenario: la señal preconfigurada `EMERGENCIA_FINALIZADA` congela una sola instantánea final, independiente de las recepciones individuales.
-- Escenarios simultáneos: la coordinación entre emergencias concurrentes no está incluida en la primera versión funcional. Los datos se identifican por emergencia para favorecer evolución posterior.
-- Las rutas calculadas son propuestas basadas en evidencia vial conocida, nunca una garantía física de tránsito.
+- **Ámbito territorial:** inicialmente Piura. El modelo permite incorporar otras localidades mediante datos, sin introducir reglas territoriales fijas.
+- **Estado de emergencia:** escenario activo previamente configurado por la administración técnica. Ninguno de los cuatro roles dispone de una interfaz para declarar o cerrar emergencias.
+- **Cierre del escenario:** la señal preconfigurada `EMERGENCIA_FINALIZADA` congela una única instantánea final, independientemente de las recepciones individuales.
+- **Escenarios simultáneos:** la primera versión funcional no contempla coordinación entre emergencias concurrentes, aunque los datos se identifican por emergencia para facilitar futuras ampliaciones.
+- **Rutas:** los recorridos calculados son propuestas basadas en información vial conocida, no garantías de transitabilidad.
 
 ## 3. Exclusiones
 
-1. No gestionar conductores, matrículas, flota ni asignación interna de transportistas.
-2. No proporcionar GPS continuo o seguimiento automático en vivo.
-3. No registrar incidentes internos del trayecto como operaciones de usuario; las discrepancias de recepción sí se conservan.
-4. No activar matching automáticamente por faltantes de una recepción ya finalizada.
-5. No admitir retiro parcial ni devolución operativa de inventario en el flujo principal.
-6. No administrar personas beneficiarias individualmente ni recoger padrones nominales.
-7. No permitir que Defensa Civil consulte lotes/stock privado ni modifique datos operativos.
-8. No generar una declaración automática de emergencia a partir de un dato del IGP, SENAMHI o satélite.
-9. No afirmar que una fuente externa tiene API autorizada si solo publica datos para consulta.
-10. No requerir microservicios, GIS propio, predicción satelital ni infraestructura de alta disponibilidad sin dimensionamiento real.
+1. Gestión de conductores, matrículas, flotas o asignación interna de transportistas.
+2. Seguimiento GPS continuo o localización automática en tiempo real.
+3. Registro de incidentes internos del trayecto como operaciones de usuario, sin excluir las discrepancias detectadas durante la recepción.
+4. Reactivación automática del matching por faltantes de una recepción finalizada.
+5. Retiros parciales o devoluciones operativas de inventario dentro del flujo principal.
+6. Administración individual de beneficiarios o recopilación de padrones nominales.
+7. Acceso de Defensa Civil a lotes o inventarios privados de ONG, así como modificación de datos operativos.
+8. Declaración automática de emergencias a partir de información del IGP, SENAMHI o fuentes satelitales.
+9. Uso de fuentes externas como API autorizadas cuando únicamente ofrecen datos para consulta.
+10. Incorporación obligatoria de microservicios, GIS propio, predicción satelital o infraestructura de alta disponibilidad sin dimensionamiento que lo justifique.
 
 ## 4. Decisiones de diseño fijadas
 
 ### 4.1. Matching y prioridad
 
-El sistema calcula una prioridad **relativa y reproducible** por necesidad, no un nivel oficial de emergencia. Utiliza tres factores disponibles en el modelo: criticidad normalizada de la categoría de producto (50 %), población afectada normalizada contra una referencia configurable (30 %) y antigüedad en días contra un horizonte configurable (20 %). La población usa como referencia inicial 1 000 personas y la antigüedad siete días; cada factor se trunca a 1. Los empates se resuelven por fecha de confirmación más antigua y UUID ascendente. Los valores constituyen una **política de software seleccionada para la versión de referencia**, no una ponderación oficial validada por una autoridad humanitaria. La fórmula se documenta en la especificación de matching.
+El sistema asigna a cada necesidad una prioridad **relativa y reproducible**, sin representar un nivel oficial de emergencia. El cálculo combina tres factores:
+
+- **Criticidad de la categoría de producto (50 %):** valor normalizado según la categoría.
+- **Población afectada (30 %):** normalizada respecto a una referencia configurable, inicialmente de 1 000 personas.
+- **Antigüedad de la solicitud (20 %):** días transcurridos respecto a un horizonte configurable, inicialmente de siete días.
+
+Cada factor se limita a un valor máximo de 1. Los empates se resuelven mediante la fecha de confirmación más antigua y, posteriormente, el UUID en orden ascendente.
+
+Estas ponderaciones corresponden a una **política de software definida para la versión de referencia**, no a criterios oficiales validados por una autoridad humanitaria. La fórmula completa se detalla en la especificación de matching.
 
 ### 4.2. Disparadores de matching
 
-Se ejecuta al confirmar una solicitud, registrar inventario utilizable nuevo o corregido, o rechazar/reducir una propuesta. Una tarea en cola procesa cada evento con una clave idempotente; la propuesta no compromete stock. Las porciones ya autorizadas y los faltantes cerrados con observaciones se excluyen de propuestas nuevas.
+El matching se ejecuta cuando:
+
+- Se confirma una solicitud.
+- Se registra inventario utilizable nuevo o corregido.
+- Se rechaza o reduce una propuesta.
+
+Cada evento se procesa mediante una tarea en cola con clave idempotente. La generación de propuestas no compromete inventario.
+
+Las cantidades ya autorizadas y los faltantes cerrados con observaciones quedan excluidos de nuevas propuestas.
 
 ### 4.3. Comprobación de ruta
 
-Antes del retiro se calcula o renueva la ruta. Una ruta se considera utilizable cuando no contiene tramos registrados como `IMPASSABLE`, no depende de tramos `UNKNOWN` y su verificación tiene menos de treinta minutos desde la evaluación más reciente. Al exceder ese plazo se reevalúa. El valor de treinta minutos es una regla técnica del diseño, no una medición garantizada de la frecuencia de actualización externa.
+Antes de confirmar un retiro, el sistema calcula o actualiza la ruta correspondiente. Se considera utilizable únicamente si cumple las siguientes condiciones:
+
+- No contiene tramos registrados como `IMPASSABLE`.
+- No depende de tramos con estado `UNKNOWN`.
+- Su verificación más reciente tiene una antigüedad inferior a treinta minutos.
+
+Una vez superado ese plazo, la ruta debe reevaluarse.
+
+El intervalo de treinta minutos es una regla técnica del diseño y no garantiza que las fuentes externas actualicen su información con esa frecuencia.
 
 ### 4.4. Riesgo territorial
 
-Los riesgos conservan fuente, desastre y fecha. Ante varios registros se muestra cada capa de riesgo por separado; la vista resumida elige la evaluación más reciente por tipo de desastre y fuente, sin inferir que una entrega humanitaria reduzca riesgo. No se calcula un color único agregado de fenómenos heterogéneos.
+Cada registro de riesgo conserva su fuente, tipo de desastre y fecha. Cuando existen varias evaluaciones, el sistema presenta las capas de riesgo por separado.
+
+La vista resumida selecciona la evaluación más reciente por tipo de desastre y fuente, sin asumir que la entrega de ayuda humanitaria disminuye el riesgo territorial.
+
+No se genera un color único que combine fenómenos de distinta naturaleza.
 
 ### 4.5. Edición y cierre
 
-Una solicitud confirmada es inmutable para el jefe de Comuna; no se edita ni cancela. La recepción finaliza conforme o con observaciones. La solicitud puede cerrarse cuando no queden autorizaciones o líneas en curso; `CLOSED` no significa satisfacción completa y conserva el saldo no atendido como resultado histórico.
+Una solicitud confirmada es inmutable para el jefe de Comuna: no puede editarla ni cancelarla.
+
+La recepción concluye con conformidad o con observaciones. Una solicitud puede cerrarse cuando no existan autorizaciones ni líneas en curso.
+
+El estado `CLOSED` no implica que todas las necesidades hayan sido satisfechas. Los saldos no atendidos permanecen registrados como parte del resultado histórico.
 
 ## 5. Carácter del diseño
 
-Tecnologías, proveedores cloud y políticas técnicas son elecciones de referencia para construcción posterior. Ninguna especificación constituye evidencia de un despliegue operativo, una disponibilidad contratada o integraciones externas ya conectadas.
+Las tecnologías, los proveedores cloud y las políticas técnicas descritas son decisiones de referencia para una implementación posterior. Su especificación no implica que el sistema esté desplegado, que exista disponibilidad contratada ni que las integraciones externas estén operativas.

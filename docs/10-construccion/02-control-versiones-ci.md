@@ -1,30 +1,38 @@
 # Control de versiones e integración continua
 
-## 1. Repositorios
+## 1. Organización de repositorios
 
-Se usan dos repositorios Git de aplicación: frontend y backend. Los contratos HTTP se publican como especificación OpenAPI versionada y se comprueba su compatibilidad. La documentación del sistema se gestiona independientemente de la ruta física de los repositorios de código.
+Alivía utiliza dos repositorios Git independientes: `frontend` y `backend`.
+
+Los contratos HTTP se mantienen mediante una especificación OpenAPI versionada, cuya compatibilidad debe verificarse durante la integración. La documentación del sistema se gestiona sin depender de las rutas físicas de los repositorios.
 
 ## 2. Flujo de cambios
 
-- Rama principal protegida; implementación en ramas cortas por capacidad.
-- Cada cambio se describe con objetivo, comportamiento, pruebas y riesgos.
-- No fusionar migración destructiva sin plan de restauración y prueba sobre datos representativos.
-- Los cambios funcionales que afectan contratos o estados deben actualizar sus criterios de aceptación antes de integrarse.
-- Cada commit conserva cambios coherentes y verificables; no mezclar refactor ajeno con una regla funcional.
+- La rama principal permanece protegida; el desarrollo se realiza en ramas cortas por capacidad.
+- Cada cambio documenta su objetivo, comportamiento, pruebas y riesgos.
+- Los commits deben agrupar modificaciones coherentes y verificables, sin incorporar refactorizaciones ajenas a la tarea.
+- Los cambios funcionales que afecten contratos o estados requieren actualizar sus criterios de aceptación antes de integrarse.
+- Las migraciones destructivas necesitan un plan de restauración y pruebas sobre datos representativos antes de fusionarse.
 
-## 3. Flujo automatizado de CI
+## 3. Integración continua
 
 ```mermaid
 flowchart LR
- Commit[Commit o pull request] --> Install[Instalar dependencias reproducibles]
- Install --> Static[Biome y TypeScript]
- Static --> Unit[Pruebas unitarias]
- Unit --> Integration[Pruebas de integracion]
- Integration --> Build[Compilacion]
- Build --> Report[Publicar estado y evidencias]
+    Commit[Commit o pull request] --> Install[Instalar dependencias reproducibles]
+    Install --> Static[Biome y TypeScript]
+    Static --> Unit[Pruebas unitarias]
+    Unit --> Integration[Pruebas de integración]
+    Integration --> Build[Compilación]
+    Build --> Report[Publicar estado y evidencias]
 ```
 
-En backend, los ensayos de integración se ejecutan contra PostgreSQL efímero con migraciones aplicadas. En frontend, se utilizan tests de componentes y compilación Next.js. Las pruebas Playwright de flujos transversales pueden ejecutarse en un job de CI con servicios de prueba conectados.
+Las verificaciones se adaptan a cada repositorio:
+
+- **Backend:** pruebas unitarias y de integración contra PostgreSQL efímero, con migraciones aplicadas.
+- **Frontend:** pruebas de componentes, análisis estático y compilación de Next.js.
+- **Flujos transversales:** pruebas Playwright en un job de CI con servicios de prueba conectados, cuando corresponda.
+
+El pipeline debe fallar ante cualquier verificación obligatoria incumplida y publicar el resultado asociado al commit.
 
 ## 4. Comandos de referencia
 
@@ -36,12 +44,22 @@ pnpm test
 pnpm build
 ```
 
-Los scripts reales se definen en cada repositorio; los comandos representan la secuencia de verificación elegida, no evidencia de ejecución. Los pipelines deben fallar si falla alguna verificación obligatoria.
+Los scripts y comandos definitivos se establecen en cada repositorio. Esta secuencia representa las verificaciones previstas, no evidencia de que hayan sido ejecutadas.
 
-## 5. Gestión de secretos y artefactos
+## 5. Secretos, artefactos y migraciones
 
-No almacenar tokens, conexiones de BD, llaves de proveedor ni cookies en Git o logs públicos. Los artefactos de CI incluyen resultado de pruebas y versión del commit, no datos privados de emergencias. Las migraciones de producción se ejecutan con permisos acotados y revisión previa; el build no debe aplicar automáticamente migraciones peligrosas sin control.
+- **Secretos:** no almacenar tokens, credenciales de base de datos, claves de proveedores ni cookies en Git o logs públicos.
+- **Artefactos de CI:** conservar resultados de pruebas y referencias al commit, sin incluir información privada de emergencias.
+- **Migraciones de producción:** ejecutarlas con permisos restringidos y revisión previa.
+- **Despliegues:** evitar que la compilación aplique automáticamente migraciones destructivas sin aprobación y control.
 
-## 6. Releases
+## 6. Versiones y releases
 
-Cada release declara versión de frontend, versión de API, migraciones y pruebas asociadas. Se conserva etiqueta Git y configuración de despliegue requerida para revertir. Un rollback del código no revierte automáticamente un cambio irreversible de datos.
+Cada release debe identificar:
+
+- Versión del frontend y de la API.
+- Migraciones de base de datos asociadas.
+- Pruebas y resultados de verificación.
+- Etiqueta Git y configuración necesaria para restaurar el despliegue.
+
+La reversión del código no revierte automáticamente cambios irreversibles en los datos. Las operaciones de restauración deben contemplar explícitamente esta limitación.

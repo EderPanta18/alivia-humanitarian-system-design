@@ -1,135 +1,161 @@
 # Especificación de requisitos no funcionales de Alivía
 
-## 1. Alcance, prioridad y medición
+## 1. Alcance y criterios de evaluación
 
-Estas condiciones describen atributos de calidad esperados para una aplicación destinada a coordinar ayuda humanitaria. Se inspiran en las áreas de calidad contempladas por ISO/IEC 25010 y en las restricciones operativas conocidas. Las **metas numéricas son propuestas para validar un eventual prototipo**, no compromisos acordados de un servicio productivo.
+Los requisitos no funcionales establecen las condiciones de calidad, seguridad, rendimiento y confiabilidad de Alivía, tomando como referencia las características de ISO/IEC 25010 y las necesidades operativas del sistema.
 
-Toda prueba real deberá registrar versión, entorno, volumen de datos, fecha, pasos ejecutados, resultados medidos y fallos observados. Una descripción de ensayo no equivale a evidencia de ejecución.
+Las metas numéricas corresponden a **parámetros de validación propuestos**, no a garantías de un servicio en producción.
+
+Las pruebas deberán documentar el entorno, versión, datos utilizados, procedimiento, resultados medidos y errores detectados. Ningún requisito se considerará cumplido sin evidencia de ejecución.
 
 ## 2. Seguridad, privacidad e integridad
 
 ### RNF-01. Autenticación y autorización en servidor
 
-- **Objetivo:** evitar operaciones o lecturas fuera del rol y entidad asignados.
-- **Condición:** credenciales validadas del lado del servidor; contraseñas protegidas con un algoritmo de hash adecuado; sesiones verificadas; permisos comprobados por petición.
-- **Comprobación propuesta:** usuario de ONG A intenta consultar o aprobar propuesta de ONG B modificando identificadores de URL/cuerpo. Resultado esperado: acceso denegado y ausencia de mutación.
-- **Aclaración:** ocultar botones por rol no reemplaza la comprobación del servidor.
+**Condición:** las credenciales se validan en el servidor, las contraseñas se almacenan mediante algoritmos de hash adecuados y las sesiones se protegen. Cada petición verifica los permisos del rol y la pertenencia del recurso, independientemente de los controles visibles en la interfaz.
 
-### RNF-02. Integridad de inventario y autorizaciones concurrentes
+**Verificación:** un usuario de ONG A no puede consultar ni modificar propuestas de ONG B, aunque altere identificadores en la URL o el cuerpo de la petición.
 
-- **Objetivo:** impedir comprometer o retirar más unidades de las disponibles.
-- **Condición:** operaciones críticas atómicas, existencia física no negativa, disponibilidad no negativa y compromisos pendientes no superiores al stock utilizable pertinente.
-- **Comprobación propuesta:** dos autorizaciones concurrentes intentan comprometer 80 de 100 unidades disponibles. Como máximo una autorización de 80 puede completarse con esos datos.
-- **Aclaración:** una propuesta no compromete; el compromiso ocurre al autorizar y el descuento físico ocurre al confirmar el retiro.
+### RNF-02. Integridad de inventario y operaciones concurrentes
 
-### RNF-03. Trazabilidad y auditoría de operaciones
+**Condición:** las autorizaciones y retiros utilizan operaciones atómicas que impiden existencias físicas negativas, disponibilidad negativa o compromisos superiores al inventario utilizable.
 
-- **Objetivo:** permitir reconstruir decisiones y cantidades.
-- **Condición:** conservar identificador de evento, usuario, rol, entidad, fecha/hora, acción, objeto y cantidades cuando proceda. Los eventos anteriores no deben desaparecer por ajustes posteriores.
-- **Comprobación propuesta:** reconstruir para un despacho cantidad solicitada, propuesta, autorizada, retirada y conforme, con responsables y momentos correspondientes.
+Las propuestas no comprometen recursos. La autorización establece el compromiso y el retiro confirmado descuenta las existencias físicas.
 
-### RNF-08. Privacidad y minimización
+**Verificación:** ante dos autorizaciones concurrentes de 80 unidades sobre una disponibilidad de 100, como máximo una puede completarse íntegramente.
 
-- **Objetivo:** reducir exposición de información personal y organizacional innecesaria.
-- **Condición:** almacenar identidades y contactos operativos mínimos, cantidades agregadas y ubicaciones de centros/comunidades cuando sean relevantes. Excluir nombres nominales de beneficiarios y datos privados de inventarios de otras ONG en vistas no autorizadas.
-- **Comprobación propuesta:** formularios no exigen padrón nominal o DNI de beneficiarios; una consulta de Defensa Civil no revela existencias de lotes privados.
+### RNF-03. Trazabilidad y auditoría
 
-## 3. Usabilidad y compatibilidad
+**Condición:** cada operación crítica conserva identificador de evento, usuario, rol, entidad, fecha y hora, acción, recurso afectado y cantidades pertinentes. Las correcciones no eliminan registros anteriores.
+
+Los informes consolidados conservan la fecha de corte y los datos necesarios para reconstruir los resultados históricos.
+
+**Verificación:** se puede reconstruir la secuencia de una solicitud, propuesta, autorización, retiro y recepción, identificando cantidades, responsables y momentos.
+
+### RNF-08. Privacidad y minimización de datos
+
+**Condición:** se recopilan únicamente identidades y contactos operativos necesarios, cantidades agregadas y ubicaciones relevantes. No se requieren padrones nominales de beneficiarios ni se exponen inventarios privados a usuarios sin autorización.
+
+**Verificación:** los formularios no solicitan DNI ni nombres individuales de beneficiarios, y Defensa Civil no puede consultar existencias o lotes privados de ONG.
+
+## 3. Usabilidad y accesibilidad
 
 ### RNF-04. Usabilidad operativa
 
-- **Objetivo:** que un usuario comprenda qué acción realiza y qué estado produce.
-- **Condición:** campos con etiquetas y unidades visibles, errores concretos por campo, confirmación previa a una autorización irreversible, estados expresados con texto además de color y separación clara entre enviado y recibido.
-- **Comprobación propuesta:** una persona puede distinguir una propuesta no autorizada, un despacho llegado y una recepción confirmada sin conocer códigos internos.
+**Condición:** las interfaces muestran etiquetas y unidades comprensibles, errores específicos por campo, confirmación previa a autorizaciones irreversibles y estados identificables mediante texto, sin depender exclusivamente del color.
 
-### RNF-05. Interfaz adaptable y accesible
+Las cantidades enviadas, autorizadas, recibidas y conformes deben distinguirse claramente.
 
-- **Objetivo:** permitir operaciones esenciales desde móvil y escritorio.
-- **Meta propuesta:** ancho mínimo de referencia de 360 px, sin desplazamiento horizontal obligatorio para formularios críticos; botones operables por tacto y teclado.
-- **Pruebas propuestas:** validar en Chrome Android, Chrome y Firefox de escritorio; comprobar solicitud, autorización y recepción con resolución 360 × 800 px.
-- **Condición adicional:** el mapa debe tener una alternativa de consulta textual cuando color, escala o controles impidan comprender una zona.
+**Verificación:** un usuario puede diferenciar una propuesta pendiente, un despacho llegado y una recepción confirmada sin conocer los códigos internos.
 
-## 4. Rendimiento y confiabilidad
+### RNF-05. Adaptabilidad y accesibilidad
 
-### RNF-06. Respuesta bajo carga de demostración
+**Condición:** las operaciones esenciales funcionan en dispositivos móviles y de escritorio, con controles accesibles mediante teclado y tacto. Los formularios críticos deben visualizarse desde un ancho de referencia de 360 px sin desplazamiento horizontal obligatorio.
 
-- **Conjunto de referencia propuesto:** 7 comunidades ficticias, 3 ONG, 1 brigada, 30 solicitudes de hasta 3 líneas y al menos 100 movimientos de inventario.
-- **Metas propuestas:** el percentil 95 de las operaciones habituales de lectura y escritura será de 3 segundos o menos; una ejecución de matching con este conjunto completará en 5 segundos o menos.
-- **Protocolo mínimo futuro:** 20 repeticiones por operación; registrar ambiente, tamaño de datos, respuesta y errores. No declarar cumplimiento sin medición real.
+Los mapas deben disponer de una alternativa textual para consultar información que no pueda interpretarse adecuadamente mediante colores, escala o controles gráficos.
 
-### RNF-07. Reintentos seguros e idempotencia
+**Verificación:** ejecutar los flujos de solicitud, autorización y recepción en Chrome Android, Chrome y Firefox de escritorio, incluyendo una resolución de 360 × 800 px.
 
-- **Objetivo:** evitar efectos duplicados por doble clic, latencia o reconexión.
-- **Condición:** operaciones críticas de autorización, retiro, recepción, generación de documentos y evento de cierre aceptan un identificador o mecanismo equivalente que impida duplicados. Ante error de red no se informa éxito hasta confirmación del servidor.
-- **Comprobación propuesta:** repetir confirmación de retiro de 50 unidades; resultado esperado: solo un movimiento de salida por 50.
+## 4. Rendimiento, confiabilidad y recuperación
 
-### RNF-09. Persistencia y recuperación
+### RNF-06. Rendimiento bajo carga de referencia
 
-- **Objetivo:** conservar operaciones aun cuando se reinicie la aplicación.
-- **Condición:** guardar solicitudes, inventario, propuestas, despachos, recepciones, evaluaciones territoriales, eventos relevantes y documentos con persistencia duradera. El navegador no es la fuente única de verdad.
-- **Prueba propuesta:** reiniciar servicios del entorno de ensayo y comprobar recuperación de datos, además de verificar al menos una restauración de respaldo antes de una eventual demostración operativa.
-- **Política de referencia:** respaldo diario, conservación de 30 días y prueba mensual de restauración; objetivo de recuperación de datos (RPO) de 24 horas y de servicio (RTO) de 8 horas en el entorno previsto. Estos objetivos requieren infraestructura acorde antes de considerarse una garantía operativa.
+**Conjunto de prueba propuesto:**
 
-## 5. Mantenibilidad e interoperabilidad
+- 7 comunidades ficticias.
+- 3 ONG y 1 brigada.
+- 30 solicitudes de hasta 3 líneas.
+- Al menos 100 movimientos de inventario.
 
-### RNF-10. Separación por entidades y capacidad de ampliación
+**Metas propuestas:**
 
-- **Objetivo:** incorporar nuevas ONG, comunidades y brigadas sin modificar reglas de matching específicas por nombre.
-- **Condición:** las relaciones y permisos se basan en identificadores y pertenencia válidos, no en listas de nombres fijos.
-- **Comprobación propuesta:** agregar una cuarta ONG ficticia con producto compatible sin cambiar el algoritmo por código duro.
+- Operaciones habituales de lectura y escritura: percentil 95 de tiempo de respuesta igual o inferior a 3 segundos.
+- Ejecución de matching con el conjunto de referencia: máximo 5 segundos.
 
-### RNF-11. Contratos consistentes entre componentes
+**Verificación:** realizar al menos 20 repeticiones por operación, registrando tiempos, volumen de datos, entorno y errores. Las metas solo se consideran alcanzadas tras mediciones reales.
 
-- **Objetivo:** mantener la misma semántica para recursos y operaciones en frontend, backend y persistencia.
-- **Condición:** contratos y validaciones acordados para usuarios, organizaciones, solicitudes, productos, propuestas, autorizaciones, despachos, recepciones, riesgos y documentos; toda mutación comprueba las relaciones en el servidor.
-- **Comprobación propuesta:** rechazar un despacho vinculado a autorización ajena o una recepción con línea de producto que no pertenece al envío.
+### RNF-07. Idempotencia y reintentos seguros
 
-### RNF-12. Exactitud de unidades, fechas y estados
+**Condición:** las operaciones críticas de autorización, retiro, recepción, generación de documentos y cierre de emergencia deben evitar efectos duplicados mediante claves idempotentes o mecanismos equivalentes.
 
-- **Objetivo:** prevenir resultados falsos por mezclar magnitudes o etapas distintas.
-- **Condición:** cantidades en unidad del catálogo, fechas con tratamiento temporal consistente, identificadores únicos y transiciones validadas. No sumar unidades heterogéneas ni equiparar autorización con recepción.
-- **Comprobación propuesta:** no presentar 10 cajas y 10 unidades como 20 unidades sin equivalencia aprobada; llegada no cambia recepción a conforme.
+Cada despacho conserva un único documento por tipo y cada evento de finalización produce un solo informe consolidado, sin sobrescrituras silenciosas.
 
-## 6. Calidad cartográfica e información de fuentes externas
+Ante fallos de conexión, no se informa éxito hasta confirmar el resultado de la operación en el servidor.
 
-### RNF-13. Procedencia y frescura de riesgo
+**Verificación:** repetir una confirmación de retiro de 50 unidades genera un único movimiento de salida. Los reintentos de generación documental o cierre tampoco producen duplicados.
 
-- **Objetivo:** impedir que se interpreten datos históricos como información actualizada.
-- **Condición:** cada evaluación territorial registra fuente y fecha de evaluación; se puede mostrar su antigüedad. Importar un dato antiguo no reemplaza automáticamente una evaluación más reciente.
-- **Comprobación propuesta:** dos mediciones de diferentes fechas se conservan y se muestran de forma interpretable; una ayuda recibida no altera el nivel de riesgo.
-- **Pendiente:** umbral temporal para rotular una evaluación como desactualizada, escalas y agregación entre distintas fuentes.
+### RNF-09. Persistencia, respaldo y recuperación
+
+**Condición:** solicitudes, inventarios, propuestas, despachos, recepciones, evaluaciones territoriales, eventos y documentos deben almacenarse de forma persistente. El navegador no constituye la fuente única de información.
+
+**Política de referencia:**
+
+| Parámetro                                | Valor propuesto |
+| ---------------------------------------- | --------------- |
+| Frecuencia de respaldo                   | Diaria          |
+| Conservación de respaldos                | 30 días         |
+| Prueba de restauración                   | Mensual         |
+| Objetivo de punto de recuperación (RPO)  | 24 horas        |
+| Objetivo de tiempo de recuperación (RTO) | 8 horas         |
+
+**Verificación:** reiniciar los servicios y comprobar la conservación de registros. Ejecutar al menos una restauración de respaldo antes de una demostración operativa.
+
+Estos objetivos requieren infraestructura y procedimientos adecuados; no representan garantías de disponibilidad contratadas.
+
+## 5. Mantenibilidad y consistencia
+
+### RNF-10. Ampliación de entidades sin reglas fijas
+
+**Condición:** las relaciones y autorizaciones utilizan identificadores y pertenencia a entidades, sin depender de nombres codificados de ONG, comunidades o brigadas.
+
+**Verificación:** incorporar una cuarta ONG con existencias compatibles sin modificar las reglas del motor de matching.
+
+### RNF-11. Consistencia de contratos entre componentes
+
+**Condición:** frontend, backend y persistencia comparten definiciones coherentes de usuarios, organizaciones, solicitudes, productos, propuestas, autorizaciones, despachos, recepciones, riesgos y documentos.
+
+Las validaciones del servidor deben impedir asociaciones incompatibles entre recursos.
+
+**Verificación:** rechazar un despacho vinculado a una autorización ajena o una recepción que incluya productos no pertenecientes al envío.
+
+### RNF-12. Exactitud de cantidades, fechas y estados
+
+**Condición:** las cantidades respetan las unidades del catálogo, las fechas utilizan un tratamiento temporal consistente y las operaciones conservan identificadores únicos y transiciones válidas.
+
+No se suman unidades heterogéneas sin equivalencia aprobada ni se equiparan etapas distintas del proceso logístico.
+
+**Verificación:** el sistema no presenta 10 cajas y 10 unidades como 20 unidades equivalentes sin conversión autorizada. Registrar una llegada tampoco cambia automáticamente la recepción a conforme.
+
+## 6. Calidad territorial e información externa
+
+### RNF-13. Procedencia y vigencia de evaluaciones de riesgo
+
+**Condición:** cada evaluación territorial conserva fuente, tipo de desastre y fecha. La visualización permite identificar su antigüedad y distingue registros históricos de información reciente.
+
+Una evaluación antigua no reemplaza automáticamente otra más reciente. Los riesgos de fenómenos distintos se muestran separadamente, sin producir un nivel agregado único.
+
+Los datos externos inválidos no actualizan las evaluaciones territoriales.
+
+**Verificación:** importar evaluaciones de distintas fechas conserva su historial y procedencia. La recepción de ayuda no modifica automáticamente el nivel de riesgo.
+
+**Pendiente de definición:** umbrales específicos para clasificar evaluaciones como desactualizadas y escalas de presentación cuando corresponda.
 
 ### RNF-14. Verificabilidad de rutas y restricciones viales
 
-- **Objetivo:** evitar registrar como validado un retiro basado en una ruta intransitable conocida.
-- **Condición:** una ruta contiene estado, origen de datos y momento de cálculo/verificación; se excluyen vías reportadas bloqueadas. En ausencia de ruta disponible no se confirma retirada.
-- **Comprobación propuesta:** bloquear un tramo candidato y comprobar que ya no se use; si no hay alternativa, no registrar movimiento de salida.
-- **Pendiente:** periodicidad de los datos y política para estado de vía desconocido. No se promete verificación física ni disponibilidad absoluta.
+**Condición:** cada ruta registra el origen de la información, su estado y la fecha y hora de cálculo y verificación.
 
-### RNF-15. Separación de alerta observada y decisión institucional
+Una ruta solo se considera utilizable cuando:
 
-- **Objetivo:** evitar afirmaciones no sustentadas de una emergencia oficialmente confirmada.
-- **Condición:** los datos externos se identifican como observación/aviso con su fuente; no disparan automáticamente una declaración formal de emergencia ni un cierre administrativo.
-- **Comprobación propuesta:** importar una observación sísmica no cambia por sí sola el estado de una emergencia a declarada ni habilita despachos.
+- No contiene tramos `IMPASSABLE`.
+- No depende de tramos `UNKNOWN`.
+- Su verificación tiene menos de 30 minutos de antigüedad.
 
-## 7. Informe final y documentos: restricciones de calidad
+Las rutas que incumplan estas condiciones deben reevaluarse antes del retiro. La verificación no garantiza la transitabilidad física de las vías.
 
-- El informe consolidado se publica **solo** después del evento preconfigurado de fin del escenario; permanece en modo lectura para Defensa Civil.
-- Se genera una sola versión final por evento y no se duplica por un evento repetido.
-- Se conserva el corte temporal del informe, incluidas necesidades no cubiertas y observaciones.
-- El manifiesto Excel refleja cantidades enviadas; el acta PDF refleja recepción y observaciones; ninguno sustituye al informe consolidado.
-- Al reintentar su generación, se preserva unicidad por despacho y tipo de documento.
+**Verificación:** bloquear un tramo de una ruta candidata impide utilizarlo. Si no existe alternativa válida, se rechaza el retiro sin descontar inventario.
 
-## 8. Matriz de calidad y estado
+### RNF-15. Diferenciación entre alertas y declaraciones de emergencia
 
-| Grupo | Característica prioritaria | Tipo de evaluación |
-|---|---|---|
-| RNF-01, 08, 15 | Seguridad, protección de datos y corrección informativa | Pruebas de autorización, inspección de contratos y escenarios externos. |
-| RNF-02, 03, 07, 12 | Integridad, confiabilidad y trazabilidad | Pruebas de concurrencia, reintentos y estados. |
-| RNF-04, 05 | Interacción y accesibilidad | Evaluación con tareas por rol y revisión de interfaz. |
-| RNF-06 | Eficiencia del desempeño | Medición bajo carga de referencia. |
-| RNF-09 | Recuperabilidad | Reinicio, respaldo y restauración. |
-| RNF-10, 11 | Mantenibilidad y compatibilidad | Revisión modular y pruebas de contratos. |
-| RNF-13, 14 | Confiabilidad de información geográfica | Pruebas con fechas y restricciones viales. |
+**Condición:** las observaciones y alertas externas conservan su procedencia y se identifican como información de fuente. Su importación no constituye una declaración institucional de emergencia ni ejecuta automáticamente su cierre.
 
-**Estado real a esta fecha:** no se reportan ejecuciones de pruebas ni resultados medidos; todas las comprobaciones descritas son criterios o planes futuros.
+**Verificación:** importar una observación sísmica o meteorológica no modifica por sí sola el estado formal del escenario ni habilita despachos.

@@ -2,136 +2,198 @@
 
 ## 1. Responsabilidad
 
-Inventory es propietario del catálogo de productos, almacenes ONG, lotes físicos, movimientos de stock, propuestas de matching, decisiones y autorizaciones de salida. No es propietario de los despachos ni de las recepciones.
+El módulo `Inventory` administra el catálogo de productos, los almacenes de ONG, los lotes, los movimientos de inventario, las propuestas de matching y las autorizaciones de salida.
 
-## 2. Modelo de relaciones
+Controla la disponibilidad y los compromisos de existencias, mientras que los despachos y las recepciones pertenecen a `Logistics` y `Shelter`, respectivamente.
+
+## 2. Modelo físico
 
 ```mermaid
 erDiagram
- inventory_category ||--o{ inventory_product : clasifica
- inventory_unit_of_measure ||--o{ inventory_product : mide
- inventory_warehouse ||--o{ inventory_stock : contiene
- inventory_product ||--o{ inventory_stock : identifica
- inventory_stock ||--o{ inventory_movement : registra
- inventory_matching ||--|{ inventory_matching_item : contiene
- inventory_stock ||--o{ inventory_matching_item : aporta
- inventory_matching ||--o| inventory_authorization : autoriza
- inventory_category {
-  uuid id PK
-  string code UK
-  string name
-  decimal criticality
-  boolean active
- }
- inventory_unit_of_measure {
-  uuid id PK
-  string code UK
-  string symbol
-  string name
-  boolean active
- }
- inventory_product {
-  uuid id PK
-  uuid category_id FK
-  uuid unit_of_measure_id FK
-  string code UK
-  string name
-  decimal delivery_multiple
-  boolean expiry_required
-  boolean active
- }
- inventory_warehouse {
-  uuid id PK
-  uuid ong_id "logico identity"
-  string name
-  string address
-  decimal latitude
-  decimal longitude
- }
- inventory_stock {
-  uuid id PK
-  uuid warehouse_id FK
-  uuid product_id FK
-  string lot_code
-  decimal physical_quantity
-  date expires_on
-  timestamptz received_at
-  string status
- }
- inventory_movement {
-  uuid id PK
-  uuid stock_id FK
-  uuid actor_user_id "logico"
-  uuid dispatch_id "logico"
-  string operation_key UK
-  string type
-  decimal quantity_delta
-  timestamptz created_at
- }
- inventory_matching {
-  uuid id PK
-  uuid request_id "logico shelter"
-  uuid ong_id "logico identity"
-  uuid confirmed_by_user_id "logico"
-  string status
-  string rejection_reason
-  timestamptz created_at
-  timestamptz confirmed_at
- }
- inventory_matching_item {
-  uuid id PK
-  uuid matching_id FK
-  uuid stock_id FK
-  uuid request_item_id "logico shelter"
-  decimal proposed_quantity
-  decimal confirmed_quantity
-  decimal priority_score
- }
- inventory_authorization {
-  uuid id PK
-  uuid matching_id FK "unico"
-  uuid authorized_by_user_id "logico"
-  string operation_key UK
-  timestamptz authorized_at
- }
+    inventory_category ||--o{ inventory_product : clasifica
+    inventory_unit_of_measure ||--o{ inventory_product : mide
+    inventory_warehouse ||--o{ inventory_stock : contiene
+    inventory_product ||--o{ inventory_stock : identifica
+    inventory_stock ||--o{ inventory_movement : registra
+    inventory_matching ||--|{ inventory_matching_item : contiene
+    inventory_stock ||--o{ inventory_matching_item : aporta
+    inventory_matching ||--o| inventory_authorization : autoriza
+
+    inventory_category {
+        uuid id PK
+        string code UK
+        string name
+        decimal criticality
+        boolean active
+    }
+
+    inventory_unit_of_measure {
+        uuid id PK
+        string code UK
+        string symbol
+        string name
+        boolean active
+    }
+
+    inventory_product {
+        uuid id PK
+        uuid category_id FK
+        uuid unit_of_measure_id FK
+        string code UK
+        string name
+        decimal delivery_multiple
+        boolean expiry_required
+        boolean active
+    }
+
+    inventory_warehouse {
+        uuid id PK
+        uuid ong_id "logico identity"
+        string name
+        string address
+        decimal latitude
+        decimal longitude
+    }
+
+    inventory_stock {
+        uuid id PK
+        uuid warehouse_id FK
+        uuid product_id FK
+        string lot_code
+        decimal physical_quantity
+        date expires_on
+        timestamptz received_at
+        string status
+    }
+
+    inventory_movement {
+        uuid id PK
+        uuid stock_id FK
+        uuid actor_user_id "logico"
+        uuid dispatch_id "logico"
+        string operation_key UK
+        string type
+        decimal quantity_delta
+        timestamptz created_at
+    }
+
+    inventory_matching {
+        uuid id PK
+        uuid request_id "logico shelter"
+        uuid ong_id "logico identity"
+        uuid confirmed_by_user_id "logico"
+        string status
+        string rejection_reason
+        timestamptz created_at
+        timestamptz confirmed_at
+    }
+
+    inventory_matching_item {
+        uuid id PK
+        uuid matching_id FK
+        uuid stock_id FK
+        uuid request_item_id "logico shelter"
+        decimal proposed_quantity
+        decimal confirmed_quantity
+        decimal priority_score
+    }
+
+    inventory_authorization {
+        uuid id PK
+        uuid matching_id FK "unico"
+        uuid authorized_by_user_id "logico"
+        string operation_key UK
+        timestamptz authorized_at
+    }
 ```
 
-## 3. Catálogo, lotes y movimientos
+## 3. Restricciones de catálogo e inventario
 
-- Producto tiene una categoría, una unidad principal y un múltiplo de entrega. No se sustituyen productos ni convierten automáticamente unidades.
-- Criticidad de categoría es parámetro normalizado en `[0,1]`, mantenido mediante carga de catálogo verificada.
-- Lote tiene `lot_code`, fecha de vencimiento si aplica, estado `USABLE`, `BLOCKED`, `QUARANTINED`, `EXPIRED`, cantidad física no negativa y almacén propietario.
-- El matching selecciona lotes `USABLE` con entrega posible antes de vencimiento bajo orden FEFO (`expires_on` ascendente, luego `received_at`, luego UUID).
-- Los tipos técnicos de movimiento `ENTRY`, `WITHDRAWAL`, `ADJUSTMENT`, `RETURN` pueden mantenerse en el enum heredado; `RETURN` no se expone como procedimiento operativo de la primera versión.
-- Un ajuste que deje stock físico por debajo de compromisos vigentes se rechaza.
+| Elemento        | Restricción                                                                                                                                                    |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Producto        | Pertenece a una categoría, utiliza una unidad de medida definida y establece un múltiplo de entrega. No se permiten sustituciones ni conversiones automáticas. |
+| Criticidad      | Valor normalizado en `[0,1]`, administrado mediante carga verificada del catálogo.                                                                             |
+| Lote            | Identificado por producto, almacén y código. Su cantidad física no puede ser negativa y registra vencimiento cuando corresponde.                               |
+| Estado del lote | `USABLE`, `BLOCKED`, `QUARANTINED` o `EXPIRED`. Solo las existencias utilizables pueden asignarse.                                                             |
+| Selección FEFO  | Prioriza lotes aptos por `expires_on ASC`, seguido de `received_at ASC` y UUID ascendente, cuando corresponda aplicar vencimiento.                             |
+| Ajustes         | Deben conservar movimientos trazables y no pueden reducir las existencias por debajo de los compromisos vigentes.                                              |
 
-## 4. Estados y operaciones
+Los movimientos registran las variaciones físicas del inventario. Los ingresos, ajustes y retiros confirmados deben conservar su causa, responsable y fecha.
 
-`MatchingStatus`: `PROPOSED` → `CONFIRMED` → `AUTHORIZED`, o `PROPOSED` → `REJECTED`. Revalidaciones fallidas se devuelven como conflicto sin convertir propuestas obsoletas en autorizaciones válidas.
+## 4. Estados de propuestas y autorizaciones
 
-`CONFIRMED` es decisión de cantidad por ONG y no reserva stock. La autorización crea un compromiso a partir de cantidades confirmadas, con operación atómica. Al retirar, Logistics solicita un descuento físico único a Inventory y se registra `WITHDRAWAL` con `operation_key UNIQUE`.
+El estado `MatchingStatus` sigue las transiciones:
+
+`PROPOSED` → `CONFIRMED` → `AUTHORIZED`
+
+O bien:
+
+`PROPOSED` → `REJECTED`
+
+| Estado       | Significado                                                          |
+| ------------ | -------------------------------------------------------------------- |
+| `PROPOSED`   | Propuesta calculada, sin compromiso de inventario.                   |
+| `CONFIRMED`  | Cantidades aceptadas por la ONG, todavía sin autorización de salida. |
+| `AUTHORIZED` | Aporte autorizado que compromete existencias disponibles.            |
+| `REJECTED`   | Propuesta rechazada, con motivo registrado.                          |
+
+La autorización se realiza mediante una operación independiente que revalida disponibilidad y cobertura de forma atómica. Si las condiciones han cambiado, se rechaza sin convertir una propuesta obsoleta en un compromiso válido.
+
+El descuento físico ocurre únicamente tras el retiro completo confirmado por la brigada. `Inventory` registra entonces un movimiento `WITHDRAWAL` con `operation_key` única, evitando duplicados.
 
 ## 5. Algoritmo de matching de referencia
 
-El puntaje es calculado por línea de necesidad:
+La prioridad se calcula por línea de necesidad:
 
-`score = 0.50 * criticality + 0.30 * min(affected_population / 1000,1) + 0.20 * min(age_days / 7,1)`
+`score = 0.50 × criticality + 0.30 × min(affected_population / 1000, 1) + 0.20 × min(age_days / 7, 1)`
 
-- `criticality` usa la categoría del producto y se limita a `[0,1]`.
-- `age_days = max(0, floor((now - confirmed_at)/86400s))`.
-- Se ordena por `score DESC`, `confirmed_at ASC`, `request_item.id ASC`.
-- Por cada necesidad elegible se calcula su porción nunca cubierta descontando recepción conforme y compromiso autorizado no concluido, y excluyendo porciones cerradas con discrepancia.
-- Los lotes compatibles se visitan por FEFO y se respeta `delivery_multiple`; propuestas no cambian stock.
-- La ONG destinataria confirma como máximo lo propuesto. Rechazos y cantidades reducidas permiten explorar otras existencias sin dar doble cobertura.
+Donde:
 
-Los coeficientes son una **decisión algorítmica de referencia**, no una priorización oficial de población vulnerable. La lógica debe permitir reconfiguración controlada manteniendo la versión de reglas utilizada en cada propuesta.
+- `criticality`: criticidad normalizada de la categoría, limitada a `[0,1]`.
+- `affected_population`: población afectada de la solicitud.
+- `age_days = max(0, floor((now - confirmed_at) / 86400s))`.
+
+Las necesidades se ordenan mediante `score DESC`, `confirmed_at ASC` y `request_item.id ASC`.
+
+Para generar propuestas, el algoritmo:
+
+1. Identifica cantidades elegibles, excluyendo recepciones conformes, compromisos vigentes y porciones cerradas con discrepancias.
+2. Selecciona existencias compatibles siguiendo FEFO y respetando `delivery_multiple`.
+3. Genera propuestas por ONG sin comprometer ni descontar inventario.
+4. Mantiene elegibles las cantidades rechazadas o reducidas que nunca fueron autorizadas, evitando duplicar cobertura.
+
+La puntuación es una **política algorítmica de referencia**, no una clasificación oficial de urgencia humanitaria. Su configuración debe permitir cambios controlados y conservar la versión de reglas aplicada a cada propuesta.
 
 ## 6. Disponibilidad y concurrencia
 
-`disponible_lote = physical_quantity_utilizable - suma(confirmed_quantity de autorizaciones vigentes aun no retiradas para ese lote)`.
+La disponibilidad se calcula por lote:
 
-No existe tabla `reservation`; un compromiso se deduce de `matching_item` asociado a autorización y ausencia de retiro. Antes de autorizar, el comando comprueba stock y cobertura de la solicitud en transacción serializable o mediante bloqueo equivalente sobre filas/líneas relevantes. Un reintento con igual clave no crea una nueva autorización. No se prometen bloqueos intermodulares sin una transacción coordinada.
+`disponible_lote = physical_quantity_utilizable - compromisos_autorizados_pendientes_de_retiro`
 
-## 7. Referencias lógicas
+Los compromisos se derivan de las cantidades confirmadas en `matching_item` que cuentan con autorización vigente y todavía no han sido retiradas. No se utiliza una tabla independiente de reservas.
 
-`warehouse.ong_id`, `matching.ong_id` apuntan a Identity; `matching.request_id` y `matching_item.request_item_id` a Shelter; `movement.dispatch_id` a Logistics. En cada operación se comprueba que lote, solicitud, organización y autorización sean coherentes.
+Antes de autorizar, el sistema verifica inventario y cobertura mediante una transacción serializable o un mecanismo de bloqueo equivalente sobre los registros involucrados.
+
+La operación debe garantizar que:
+
+- La disponibilidad nunca sea negativa.
+- Las autorizaciones concurrentes no comprometan las mismas existencias por encima de lo disponible.
+- Los reintentos con una misma clave idempotente no creen autorizaciones adicionales.
+- Las validaciones entre módulos se coordinen dentro de una transacción consistente.
+
+## 7. Referencias entre módulos
+
+Las relaciones externas utilizan UUID lógicos, sin claves foráneas físicas entre schemas.
+
+| Referencia                            | Módulo propietario | Entidad relacionada                 |
+| ------------------------------------- | ------------------ | ----------------------------------- |
+| `warehouse.ong_id`                    | `Identity`         | ONG propietaria del almacén.        |
+| `matching.ong_id`                     | `Identity`         | ONG destinataria de la propuesta.   |
+| `matching.confirmed_by_user_id`       | `Identity`         | Usuario que confirma el aporte.     |
+| `authorization.authorized_by_user_id` | `Identity`         | Usuario que autoriza la salida.     |
+| `movement.actor_user_id`              | `Identity`         | Usuario asociado al movimiento.     |
+| `matching.request_id`                 | `Shelter`          | Solicitud que origina la propuesta. |
+| `matching_item.request_item_id`       | `Shelter`          | Línea de necesidad propuesta.       |
+| `movement.dispatch_id`                | `Logistics`        | Despacho asociado al retiro.        |
+
+La capa de aplicación verifica la existencia, titularidad y correspondencia de estas referencias antes de confirmar operaciones.

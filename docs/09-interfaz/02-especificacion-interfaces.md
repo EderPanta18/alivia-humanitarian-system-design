@@ -1,52 +1,93 @@
 # Especificación funcional de interfaces principales
 
-## 1. Criterio de cobertura visual
+## 1. Alcance y criterios de diseño
 
-Se priorizan pantallas de tareas representativas de los seis macroprocesos. No se requiere un mockup individual para cada operación técnica: el matching automático se observa desde la propuesta dirigida a ONG y la información agregada de cobertura. Los diseños visuales son recursos editables externos; este documento establece controles y comportamiento, no PNG, Figma, URLs ni posiciones rígidas.
+Las interfaces principales representan las tareas de los seis macroprocesos de Alivía. No se requiere una pantalla independiente para cada operación interna: el matching automático se refleja en las propuestas de ONG y en las consultas de cobertura.
+
+Esta especificación define controles, interacciones, validaciones y estados, sin imponer URLs, herramientas de diseño ni distribuciones visuales rígidas.
+
+Los diseños externos se clasifican como:
+
+- `REFERENCIA`: propuesta visual pendiente de evaluación.
+- `ADAPTADO`: diseño ajustado a los requisitos de Alivía.
+- `ACEPTADO`: diseño que cubre entradas, acciones, restricciones, resultados y estados de su identificador `UI-...`.
+
+Un cambio de ruta o tecnología visual no invalida por sí solo un diseño aceptado.
 
 ## 2. UI-COM-01: registrar solicitud
 
-- **Contexto:** cuenta de jefe de Comuna activa y asociada a una comunidad.
-- **Cabecera:** comunidad (solo lectura), emergencia activa y fecha local informativa.
-- **Entradas:** población afectada entera no negativa; situación obligatoria; lista con producto de catálogo, unidad fija y cantidad positiva por línea.
-- **Interacciones:** agregar/eliminar línea antes de confirmar, revisar y enviar. Evitar duplicar producto en varias líneas.
-- **Estados:** vacío, edición, error por campo, enviando, confirmado con ID, error de red sin confirmación.
-- **Criterio:** ninguna solicitud confirmada queda editable o cancelable desde esta pantalla.
+**Contexto:** usuario activo con rol `comuna`, vinculado a una comunidad.
 
-## 3. UI-ONG-02 y UI-ONG-03: propuesta y autorización
+- **Información visible:** comunidad de solo lectura, emergencia activa y fecha local informativa.
+- **Entradas:** población afectada entera no negativa, descripción obligatoria de la situación y líneas con producto del catálogo, unidad fija y cantidad positiva.
+- **Interacciones:** agregar o eliminar líneas, revisar y confirmar la solicitud.
+- **Validaciones:** impedir productos duplicados y mostrar errores específicos por campo.
+- **Estados:** vacío, edición, error de validación, envío, confirmación con identificador y error de red sin confirmación.
 
-- **Contexto:** propuesta perteneciente a la ONG autenticada.
-- **Visualizar:** comunidad, justificación, productos, cantidad propuesta, lotes y disponibilidad, prioridad explicable.
-- **Acciones:** confirmar mismo o menor aporte por línea; rechazar con motivo si ninguna línea aportada; autorizar posteriormente en un paso distinto.
-- **Confirmación:** advertencia antes de autorizar salida; el sistema revalida stock/cobertura y puede devolver conflicto.
-- **Estados:** propuesta nueva, revisión, confirmada, autorizada, rechazada o conflicto; no mostrar «retirada» antes de acción de brigada.
+Una solicitud confirmada no puede editarse ni cancelarse desde la interfaz de Comuna.
 
-## 4. UI-BRI-01 y UI-BRI-02: traslado
+## 3. UI-ONG-02 y UI-ONG-03: propuestas y autorizaciones
 
-- **Contexto:** despacho autorizado de la brigada.
-- **Visualizar:** almacén, comunidad, productos, cantidades, mapa con ruta, fecha de comprobación y tramos con estado reportado.
-- **Acciones:** consultar/revalidar ruta; verificar retiro completo; registrar llegada.
-- **Bloqueos:** sin ruta `AVAILABLE` vigente no aparece confirmación habilitada de retiro; tampoco se permite editar cantidades o confirmar retiro parcial.
-- **Estados:** ruta disponible, no disponible o vencida; despacho autorizado, retirado, llegado. La ubicación indicada no pretende ser GPS en vivo.
+**Contexto:** propuesta perteneciente a la ONG autenticada.
 
-## 5. UI-COM-03: recepción
+- **Información visible:** comunidad destinataria, justificación, productos, cantidades propuestas, lotes, disponibilidad y prioridad explicable.
+- **Confirmación:** aceptar cantidades iguales o inferiores a las propuestas, individualmente por línea.
+- **Rechazo:** registrar un motivo obligatorio cuando no se acepta ningún aporte.
+- **Autorización:** acción independiente y posterior a la confirmación, con advertencia previa y revalidación de existencias y cobertura.
+- **Estados:** propuesta nueva, en revisión, confirmada, autorizada, rechazada o en conflicto.
 
-- **Contexto:** despacho llegado a la comunidad de la cuenta.
-- **Visualizar:** lista enviada y cantidades por producto/unidad; campos recibida físicamente, conforme y observaciones.
-- **Validaciones:** `0 <= conforme <= recibida <= enviada`; faltante físico calculado por servidor. Registrar daño como no conforme, no como faltante físico.
-- **Acciones:** confirmar todo conforme o finalizar con observaciones; no existe estado que requiera resolver discrepancias antes de terminar recepción.
-- **Resultado:** manifiesto XLSX y acta PDF generados como documentos posteriores; reportes internos de discrepancia no tienen PDF propio.
+La confirmación no reserva existencias ni produce descuentos físicos. Un conflicto de autorización debe mostrarse explícitamente y no puede presentarse como salida autorizada.
+
+El estado de retiro solo aparece después de la confirmación correspondiente por la brigada.
+
+## 4. UI-BRI-01 y UI-BRI-02: despacho y traslado
+
+**Contexto:** despacho autorizado y asignado a la brigada autenticada.
+
+- **Información visible:** almacén de origen, comunidad destinataria, productos, cantidades autorizadas, mapa de ruta, fecha de verificación y estados viales reportados.
+- **Interacciones:** consultar o revalidar la ruta, confirmar retiro completo y registrar llegada.
+- **Validaciones:** exigir ruta `AVAILABLE` vigente y coincidencia total con las cantidades autorizadas antes del retiro.
+- **Restricciones:** no permitir modificaciones de cantidades ni retiros parciales.
+- **Estados de ruta:** disponible, no disponible o vencida.
+- **Estados de despacho:** autorizado, retirado y llegado.
+
+Si la ruta no está verificada y vigente, la confirmación del retiro permanece deshabilitada.
+
+El mapa representa recorridos calculados y condiciones conocidas, no seguimiento GPS en tiempo real.
+
+## 5. UI-COM-03: confirmar recepción
+
+**Contexto:** despacho con llegada registrada a la comunidad del usuario.
+
+- **Información visible:** productos enviados, unidades y cantidades por línea.
+- **Entradas:** cantidad recibida físicamente, cantidad conforme y observaciones.
+- **Validaciones:** `0 <= conforme <= recibida <= enviada`. El servidor calcula el faltante físico.
+- **Interacciones:** confirmar recepción conforme o finalizar con observaciones.
+- **Resultado:** recepción finalizada y generación posterior del manifiesto XLSX y el acta PDF.
+
+Los productos dañados cuentan como recibidos físicamente, pero no como conformes. Las discrepancias no impiden finalizar la recepción ni requieren resolución previa.
+
+El reporte interno de discrepancias no genera un PDF independiente.
 
 ## 6. UI-DC-01, UI-DC-02 y UI-DC-03: supervisión
 
-- **Mapa de riesgo:** filtro por desastre/fuente/fecha, severidad territorial, leyenda, marca de antigüedad e incertidumbre.
-- **Atención humanitaria:** vista separada de solicitudes, autorizado, trasladado, conforme y brechas. No trasladar colores de riesgo a estados de atención.
-- **Informe final:** disponible solo tras evento preconfigurado de cierre; solo lectura, con fecha de corte y observaciones. No incluir existencias privadas de ONG.
+Las interfaces de Defensa Civil son exclusivamente de consulta.
 
-## 7. Accesibilidad y responsive
+| Vista                           | Información y comportamiento                                                                                                                                  |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `UI-DC-01` — Mapa territorial   | Riesgos por desastre, fuente y fecha; filtros, leyenda, severidad, antigüedad e incertidumbre de los datos.                                                   |
+| `UI-DC-02` — Brechas y entregas | Solicitudes, cantidades autorizadas, trasladadas y conformes, junto con brechas de atención. La cobertura se representa separadamente del riesgo territorial. |
+| `UI-DC-03` — Informe final      | Instantánea consolidada con fecha de corte y observaciones, disponible únicamente después del evento de cierre preconfigurado.                                |
 
-Los controles tendrán etiquetas visibles, errores ligados a campo, mensajes no basados solo en colores, foco por teclado, contraste adecuado, tamaños táctiles útiles y navegación funcional desde 360 px. Las tablas extensas deben contar con representación compacta legible sin ocultar cantidades críticas.
+Estas vistas no permiten modificar operaciones, cerrar emergencias ni consultar inventarios privados de ONG. Los colores de riesgo territorial no deben reutilizarse como indicadores de atención humanitaria.
 
-## 8. Reutilización de diseños
+## 7. Accesibilidad y diseño adaptable
 
-Todo diseño externo se clasifica como `REFERENCIA`, `ADAPTADO` o `ACEPTADO`. Se acepta cuando cubre entradas, acciones, restricciones, resultados y estados de su identificador UI; un cambio de ruta o framework visual por sí solo no invalida un diseño previamente aceptado.
+Todas las interfaces deben cumplir las siguientes condiciones:
+
+- Controles con etiquetas visibles y errores asociados a los campos correspondientes.
+- Estados y mensajes comprensibles sin depender exclusivamente del color.
+- Navegación mediante teclado, foco perceptible y contraste adecuado.
+- Áreas de interacción táctil utilizables.
+- Diseño funcional desde 360 px de ancho.
+- Tablas extensas con representación compacta legible, sin ocultar cantidades críticas.

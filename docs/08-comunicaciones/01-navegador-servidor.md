@@ -2,47 +2,94 @@
 
 ## 1. Modelo de interacción
 
-Alivía es una aplicación web con cliente Next.js y API NestJS independientes. El navegador se comunica con el frontend mediante HTTPS; el frontend entrega solicitudes JSON a la API mediante HTTPS. La API autoriza la operación, ejecuta casos de uso y utiliza PostgreSQL mediante repositorios de datos. Las fuentes externas se consultan desde servicios del backend, no desde navegadores que expongan credenciales.
+Alivía utiliza un frontend Next.js y una API NestJS independientes, comunicados mediante HTTPS. El frontend envía solicitudes JSON a la API, que valida identidad, permisos y datos antes de ejecutar los casos de uso y acceder a PostgreSQL.
+
+Las integraciones externas se realizan desde el backend para evitar exponer credenciales en el navegador.
 
 ```mermaid
 sequenceDiagram
- autonumber
- participant U as Usuario
- participant B as Navegador
- participant N as Next.js
- participant A as API NestJS
- participant D as PostgreSQL
- U->>B: Confirma accion
- B->>N: HTTPS
- N->>A: HTTPS JSON con sesion
- A->>A: Validar identidad titularidad y datos
- A->>D: Transaccion autorizada
- D-->>A: Resultado persistido
- A-->>N: Respuesta tipada
- N-->>B: Actualizacion visible
- B-->>U: Confirmacion o error
+    autonumber
+    participant U as Usuario
+    participant B as Navegador
+    participant N as Next.js
+    participant A as API NestJS
+    participant D as PostgreSQL
+
+    U->>B: Confirma acción
+    B->>N: HTTPS
+    N->>A: HTTPS JSON con sesión
+    A->>A: Validar identidad, titularidad y datos
+    A->>D: Transacción autorizada
+    D-->>A: Resultado persistido
+    A-->>N: Respuesta tipada
+    N-->>B: Actualización visible
+    B-->>U: Confirmación o error
 ```
 
-## 2. Protocolo y formato
+## 2. Protocolos y contratos
 
-- Transporte externo: HTTPS con TLS válido. HTTP redirige a HTTPS.
-- API primaria: REST JSON, rutas versionadas con prefijo `/v1`; las URLs son un contrato técnico configurable, no identidad de una vista ni nombre de archivo.
-- Identificador de recurso: UUID. Fechas en ISO 8601/UTC. Cantidades decimales como cadenas normalizadas al intercambiar información monetaria o de stock precisa, evitando errores de coma flotante.
-- Código de respuesta: `200` lectura/actualización, `201` alta, `204` operación sin cuerpo, `400` petición mal formada, `401` sin sesión, `403` sin acceso, `404` no existente u oculto, `409` conflicto, `422` datos semánticamente inválidos, `429` demasiadas solicitudes, `500` fallo no previsto.
-- Errores: cuerpo basado en `application/problem+json` con `type`, `title`, `status`, `detail`, `instance` y `requestId`. No retornar trazas de stack ni secretos al navegador.
+La comunicación debe cumplir las siguientes convenciones:
+
+- **Transporte:** HTTPS con TLS válido y redirección desde HTTP.
+- **API:** REST con JSON y rutas versionadas mediante `/v1`. Las direcciones se gestionan mediante configuración.
+- **Identificadores:** UUID para recursos.
+- **Fechas:** ISO 8601 en UTC.
+- **Cantidades:** cadenas decimales normalizadas cuando se requiera precisión exacta de inventario, evitando errores de coma flotante.
+- **Errores:** respuestas `application/problem+json` con `type`, `title`, `status`, `detail`, `instance` y `requestId`, sin exponer trazas internas ni secretos.
+
+### Códigos de respuesta HTTP
+
+| Código | Uso                                                       |
+| ------ | --------------------------------------------------------- |
+| `200`  | Consulta o actualización exitosa.                         |
+| `201`  | Recurso creado.                                           |
+| `204`  | Operación exitosa sin cuerpo de respuesta.                |
+| `400`  | Petición mal formada.                                     |
+| `401`  | Autenticación ausente o inválida.                         |
+| `403`  | Operación no autorizada para el usuario.                  |
+| `404`  | Recurso inexistente u oculto por restricciones de acceso. |
+| `409`  | Conflicto de estado o concurrencia.                       |
+| `422`  | Datos semánticamente inválidos.                           |
+| `429`  | Límite de solicitudes excedido.                           |
+| `500`  | Error interno no previsto.                                |
 
 ## 3. Sesión y credenciales
 
-El backend emite sesión JWT validada por firma, expiración y audiencia; el navegador la transporta mediante cookie `HttpOnly`, `Secure` y `SameSite=Lax` por un proxy web de mismo sitio. Si el frontend requiere acceso al backend en otro origen, utiliza proxy de servidor en Next.js para reducir complejidad CORS y evita exponer el JWT a JavaScript. Las escrituras que empleen cookies necesitan protección CSRF y validación de origen.
+El backend emite un JWT validado mediante firma, expiración y audiencia. El navegador transporta la sesión mediante una cookie con los atributos:
 
-## 4. Idempotencia y coherencia
+- `HttpOnly`: impide el acceso al token desde JavaScript.
+- `Secure`: restringe su transmisión a conexiones HTTPS.
+- `SameSite=Lax`: limita su envío en determinados contextos entre sitios.
 
-Acciones como autorizar salida, confirmar retiro o cerrar recepción envían `Idempotency-Key`. El botón queda bloqueado durante solicitud; el estado solo se actualiza después de respuesta confirmada. Ante error de red, el frontend consulta estado actual antes de reintentar. No se infiere éxito a partir de desaparición de un indicador de carga.
+Next.js utiliza un proxy de servidor para comunicarse con la API desde un contexto de mismo sitio, reduciendo la complejidad de CORS y evitando exponer el JWT al código del navegador.
 
-## 5. Actualización de vistas
+Las operaciones de escritura autenticadas mediante cookies requieren protección CSRF y validación de origen.
 
-La versión de referencia emplea consultas HTTP revalidadas después de cada acción y actualización periódica moderada para bandejas. WebSocket no forma parte de la primera versión; introducirlo requeriría demostrar la necesidad de eventos realmente instantáneos y definir orden, reconexión y recuperación. No se simula GPS continuo ni detección instantánea de cortes viales.
+## 4. Idempotencia y consistencia de operaciones
+
+Las operaciones críticas, como autorizaciones, retiros y recepciones, utilizan una cabecera `Idempotency-Key` para evitar efectos duplicados.
+
+El frontend debe:
+
+- Deshabilitar temporalmente la acción mientras se procesa la solicitud.
+- Actualizar el estado visible únicamente después de recibir una respuesta confirmada.
+- Consultar el estado de la operación ante fallos de red antes de reintentar.
+- Evitar interpretar la desaparición de un indicador de carga como confirmación de éxito.
+
+Los reintentos deben conservar la identidad de la operación original para impedir autorizaciones, descuentos o recepciones duplicadas.
+
+## 5. Actualización de información
+
+La versión de referencia utiliza consultas HTTP con revalidación después de cada operación y actualizaciones periódicas moderadas para las bandejas de trabajo.
+
+WebSocket no forma parte del alcance inicial. Su incorporación requiere justificar la necesidad de comunicación en tiempo real y definir mecanismos de ordenamiento, reconexión y recuperación de eventos.
+
+La plataforma no proporciona seguimiento GPS continuo ni detección instantánea de bloqueos viales.
 
 ## 6. Conectividad y accesibilidad
 
-La interfaz debe soportar redes inestables con indicación de conexión, reintentos seguros y mensajes claros. No se ofrece funcionamiento completamente offline con sincronización diferida: una escritura no confirmada por el servidor permanece como no realizada. Las respuestas incluyen etiquetas textuales para estados, no solo colores.
+La interfaz debe contemplar conexiones inestables mediante indicadores de conectividad, mensajes de error comprensibles y reintentos seguros.
+
+No se implementa un modo completamente offline con sincronización diferida. Las operaciones de escritura sin confirmación del servidor no se consideran completadas.
+
+Los estados y resultados deben presentarse mediante etiquetas textuales, sin depender exclusivamente de colores.

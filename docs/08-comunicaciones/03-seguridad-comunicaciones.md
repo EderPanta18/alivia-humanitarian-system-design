@@ -2,37 +2,65 @@
 
 ## 1. Objetivos de seguridad
 
-Proteger autenticidad de usuarios, confidencialidad de datos operativos, integridad de comandos y trazabilidad de acciones. La interfaz no constituye una frontera de seguridad; la API vuelve a verificar cada lectura y escritura.
+La seguridad de Alivía busca garantizar la autenticidad de los usuarios, la confidencialidad de la información operativa, la integridad de las operaciones y su trazabilidad.
+
+La API constituye el punto de control de acceso y debe validar los permisos y la titularidad de los recursos en cada consulta o modificación. Las restricciones visuales del frontend no sustituyen estas comprobaciones.
 
 ## 2. Amenazas y controles
 
-| Amenaza | Medida de diseño | Verificación |
-|---|---|---|
-| Suplantación | Hash Argon2id, sesión firmada, vencimiento y revocación | JWT inválido/expirado devuelve 401. |
-| Acceso entre ONG | Filtro por entidad y comparación del propietario del recurso | ONG A no lee ni autoriza recursos de ONG B. |
-| Escalada de rol | Roles impuestos por servidor; jamás confiar en un `role` del JSON de usuario | Usuario Comuna no autoriza despacho. |
-| CSRF | Cookie SameSite, comprobación Origin y token CSRF en comandos mutantes según topología | Petición cross-site sin protección no altera registros. |
-| XSS | Escape de contenido y política CSP, sin tokens en localStorage | Campos libres no ejecutan scripts. |
-| Reenvío de comandos | Clave idempotente y control de estados transaccional | Doble clic no duplica descuento. |
-| Filtración por logs | Redacción de cookies, JWT, contraseñas y PII | Logs sin credenciales. |
-| Datos externos alterados | Validación de esquema, fuente, fecha y geolocalización | Observación inválida no activa procesos ni riesgo arbitrario. |
-| Descarga de archivos ajenos | Autorización en API y URLs de objeto firmadas de duración corta | Usuarios ajenos reciben 403. |
+| Amenaza                        | Control de seguridad                                                                                       | Verificación                                                                                 |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Suplantación de identidad      | Contraseñas protegidas con Argon2id, sesiones firmadas, expiración y revocación.                           | Un JWT inválido o expirado devuelve `401`.                                                   |
+| Acceso entre ONG               | Autorización por entidad y verificación de titularidad del recurso.                                        | ONG A no puede consultar ni autorizar recursos de ONG B.                                     |
+| Escalada de privilegios        | Roles determinados por el servidor, sin confiar en valores enviados por el cliente.                        | Un usuario de Comuna no puede autorizar salidas.                                             |
+| CSRF                           | Cookies `SameSite`, validación de `Origin` y tokens CSRF para operaciones de escritura según la topología. | Una petición entre sitios sin protección válida no modifica registros.                       |
+| XSS                            | Escape de contenido, política CSP y prohibición de almacenar tokens en `localStorage`.                     | Los campos de texto no permiten ejecutar scripts.                                            |
+| Repetición de comandos         | Claves idempotentes y validación transaccional de estados.                                                 | Una confirmación repetida no duplica descuentos.                                             |
+| Filtración de credenciales     | Exclusión de contraseñas, JWT, cookies y datos personales sensibles de los logs.                           | Los registros no exponen credenciales ni secretos.                                           |
+| Manipulación de datos externos | Validación de esquema, fuente, fecha y ubicación.                                                          | Una observación inválida no activa operaciones ni genera evaluaciones de riesgo arbitrarias. |
+| Acceso indebido a documentos   | Autorización en la API y URLs firmadas de corta duración para archivos.                                    | Un usuario sin permisos recibe `403`.                                                        |
 
-## 3. Sesiones web
+## 3. Gestión de sesiones
 
-- Cookie: `HttpOnly`, `Secure` en HTTPS y `SameSite=Lax` cuando toda sesión fluye por el mismo sitio a través del frontend.
-- Enlace entre servicios: proxy servidor seguro, sin JWT expuesto a JavaScript; el backend valida emisión, firma, audiencia, caducidad y revocación.
-- Contraseña: no se transmite fuera de TLS ni se registra en consola; protección contra fuerza bruta y límite de intentos de login.
-- Logout: expira cookie y revoca token o sesión identificada en backend.
+Las sesiones web deben cumplir las siguientes condiciones:
+
+- **Cookies:** utilizar `HttpOnly`, `Secure` sobre HTTPS y `SameSite=Lax` cuando la comunicación se realice mediante el proxy de mismo sitio.
+- **Comunicación entre servicios:** emplear un proxy seguro de Next.js sin exponer el JWT a JavaScript.
+- **Validación de tokens:** verificar emisor, firma, audiencia, expiración y revocación en el backend.
+- **Contraseñas:** transmitirlas exclusivamente mediante TLS, impedir su registro en logs y aplicar límites de intentos para mitigar ataques de fuerza bruta.
+- **Cierre de sesión:** invalidar la cookie y revocar el token o la sesión correspondiente en el servidor.
 
 ## 4. Autorización por recurso
 
-Todas las consultas y comandos vinculan `actor_user_id`, `role`, entidad y objeto concreto. Un miembro de ONG accede únicamente a su ONG y sus almacenes; Comuna accede únicamente a su comunidad y recepciones; Brigada solamente a despachos asignados; Defensa Civil solo a vistas agregadas territoriales y reporte final publicado. La administración técnica de fuentes y escenarios no se expone como quinto rol público.
+Cada operación se valida según el usuario autenticado, su rol, la entidad vinculada y el recurso solicitado.
 
-## 5. Seguridad de datos
+| Rol            | Ámbito autorizado                                                                                                                 |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `comuna`       | Solicitudes, despachos y recepciones de su comunidad.                                                                             |
+| `ong`          | Inventarios, propuestas, autorizaciones y aportes de su organización.                                                             |
+| `brigada`      | Despachos asignados a su brigada y operaciones logísticas permitidas.                                                             |
+| `defensaCivil` | Consultas territoriales y de atención de solo lectura, además de informes finales publicados, sin acceder a inventarios privados. |
 
-TLS externo, credenciales de BD restringidas al backend, copia de seguridad cifrada y secretos gestionados por proveedor. No se recogen nombres ni DNI de beneficiarios. Ubicación geográfica almacenada corresponde a comunidad/almacén y no al seguimiento de personas. Se conservan registros de auditoría y accesos a información sensible durante el periodo establecido por la política operativa del sistema.
+La administración técnica de fuentes externas y escenarios de emergencia permanece fuera de los roles operativos públicos.
+
+## 5. Protección de datos e infraestructura
+
+- **Comunicaciones:** utilizar TLS para conexiones externas.
+- **Base de datos:** restringir el acceso y las credenciales a los servicios autorizados del backend.
+- **Secretos:** gestionarlos mediante mecanismos seguros del proveedor de infraestructura.
+- **Respaldos:** mantener copias de seguridad cifradas.
+- **Privacidad:** no recopilar nombres ni DNI de beneficiarios. Las ubicaciones corresponden a comunidades y almacenes, sin seguimiento individual de personas.
+- **Auditoría:** conservar registros de operaciones y accesos a información sensible conforme a la política de retención establecida.
 
 ## 6. Respuesta a incidentes
 
-Revocar tokens comprometidos, rotar claves, congelar temporalmente acciones críticas según impacto, conservar evidencia y recuperar servicio mediante procedimiento verificable. Nunca «arreglar» inconsistencias borrando eventos de auditoría. Las alertas automáticas se basan en errores y fallas técnicas, no en decisiones humanitarias autónomas.
+Ante un incidente de seguridad, las medidas aplicables incluyen:
+
+1. Revocar sesiones o tokens comprometidos y rotar las credenciales afectadas.
+2. Restringir temporalmente operaciones críticas cuando el impacto lo requiera.
+3. Preservar registros y evidencias para investigar el incidente.
+4. Recuperar y verificar la integridad del servicio antes de restablecer las operaciones afectadas.
+
+Las correcciones no deben eliminar ni sobrescribir eventos históricos de auditoría.
+
+Las alertas automáticas se limitan a incidentes y fallos técnicos, sin ejecutar decisiones humanitarias autónomas.

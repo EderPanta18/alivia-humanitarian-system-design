@@ -1,41 +1,68 @@
 # Servidores web y ejecución de aplicaciones
 
-## 1. Frontend
+## 1. Arquitectura de ejecución
 
-Vercel aloja la aplicación Next.js. El navegador recibe UI por HTTPS y puede efectuar navegación y renderizado de servidor según las páginas. No se almacenan en el navegador secretos de sesión, conexiones de base de datos ni claves de proveedores. Los recursos estáticos se sirven mediante distribución web del proveedor y siguen una política de caché apropiada.
+Alivía utiliza **Vercel** para alojar el frontend Next.js y **Render** para ejecutar la API NestJS sobre Node.js.
 
-## 2. Backend
+El navegador accede a la interfaz mediante HTTPS, con navegación y renderizado de servidor según las necesidades de cada página. Los recursos estáticos se distribuyen mediante la infraestructura de Vercel, aplicando políticas de caché adecuadas.
 
-Render aloja un servicio web Node.js/NestJS accesible por HTTPS. El proceso expone un puerto configurado (`PORT`), endpoint de salud y API REST versionada. Las operaciones de matching, importación y documentos pueden comenzar como tareas del mismo backend con ejecución controlada e idempotente; si requieren procesamiento separado, se podrán desplegar workers sin alterar límites funcionales de los módulos.
+La comunicación entre componentes sigue estas condiciones:
 
-## 3. Topología de peticiones
+- **Frontend:** utiliza un proxy seguro de Next.js hacia la API configurada, con control de origen y manejo de cookies.
+- **Backend:** expone una API REST versionada mediante HTTPS, utilizando el puerto configurado en `PORT`.
+- **Autorización:** la API autentica las operaciones, valida sus datos y aplica límites de recursos.
+- **Persistencia:** únicamente el backend accede a PostgreSQL mediante conexiones cifradas y un pool configurado.
+- **Integraciones:** los servicios externos se consumen desde adaptadores del backend, sin exponer credenciales al navegador.
 
-- Dominio público de la interfaz con certificado TLS.
-- Proxy seguro desde Next.js a URL configurada de API, control de origen y cookies.
-- API con autenticación de cada comando, validación y límites de recursos.
-- Base PostgreSQL únicamente desde servidor, conexión cifrada y pool.
-- Servicios externos solo consumidos por adaptadores autenticados del backend.
+Los secretos de sesión, las conexiones de base de datos y las claves de proveedores permanecen fuera del código ejecutado en el navegador.
 
-## 4. Variables de entorno
+## 2. Procesamiento de tareas
 
-| Variable | Dueño | Exposición |
-|---|---|---|
-| `APP_ORIGIN` | Frontend y API | URL pública, no secreto |
-| `API_INTERNAL_ORIGIN` | Frontend servidor | Configuración privada del servidor |
-| `DATABASE_URL` | Backend | Secreto; solo backend |
-| `SESSION_SECRET` | Backend | Secreto; rotación programada |
-| `MAP_PROVIDER_KEY` | Backend | Secreto si API lo requiere |
-| `SOURCE_API_KEYS` | Backend | Secreto según cada fuente |
-| `DOCUMENT_STORAGE_*` | Backend | Secreto salvo endpoint público configurado |
+Las operaciones de matching, importación de observaciones y generación documental pueden ejecutarse inicialmente como tareas controladas e idempotentes del backend.
 
-No almacenar claves reales en repositorios. Las variables de Next.js con prefijo público jamás contendrán secretos.
+Si sus necesidades de procesamiento lo justifican, podrán trasladarse a workers independientes sin modificar las responsabilidades ni los contratos funcionales de los módulos.
 
-## 5. Salud y despliegue
+Esta separación es una posibilidad de evolución, no un requisito de despliegue inicial.
 
-`GET /health/live` evalúa que el proceso responda; `GET /health/ready` comprueba dependencias necesarias sin revelar cadenas de conexión. La plataforma debe distinguir un proceso activo de uno listo para procesar operaciones. El despliegue inicia solo tras construir, validar variables y completar migraciones revisadas.
+## 3. Variables de entorno
 
-## 6. Costos y continuidad
+| Variable              | Responsable      | Exposición                                                           |
+| --------------------- | ---------------- | -------------------------------------------------------------------- |
+| `APP_ORIGIN`          | Frontend y API   | URL pública; no es un secreto.                                       |
+| `API_INTERNAL_ORIGIN` | Servidor Next.js | Configuración del servidor, no expuesta al navegador.                |
+| `DATABASE_URL`        | Backend          | Secreto exclusivo del backend.                                       |
+| `SESSION_SECRET`      | Backend          | Secreto con rotación programada.                                     |
+| `MAP_PROVIDER_KEY`    | Backend          | Secreto cuando el proveedor lo requiera.                             |
+| `SOURCE_API_KEYS`     | Backend          | Credenciales según cada fuente externa.                              |
+| `DOCUMENT_STORAGE_*`  | Backend          | Credenciales privadas, excepto endpoints configurados como públicos. |
 
-Render dispone de instancias de entrada de pago y un servicio gratuito con suspensión por inactividad; Vercel y Supabase ofrecen planes de desarrollo sujetos a condiciones. No fijar el costo anual definitivo sin conocer tráfico, región, almacenamiento documental y acuerdo de disponibilidad. Para una operación humanitaria pública se necesitan planes con disponibilidad comprobable y medidas de recuperación acordes al riesgo.
+Las credenciales reales no deben almacenarse en Git. Las variables de Next.js expuestas al navegador mediante prefijos públicos nunca deben contener secretos.
 
-Sitios oficiales: https://vercel.com/docs/ ; https://render.com/docs/ ; https://supabase.com/docs/ .
+## 4. Salud y despliegue
+
+El backend expone dos endpoints de comprobación:
+
+| Endpoint            | Propósito                                                                              |
+| ------------------- | -------------------------------------------------------------------------------------- |
+| `GET /health/live`  | Comprobar que el proceso responde.                                                     |
+| `GET /health/ready` | Verificar que las dependencias necesarias están disponibles para procesar operaciones. |
+
+Las respuestas no deben revelar credenciales ni cadenas de conexión. Un proceso activo no se considera necesariamente listo para atender solicitudes.
+
+El despliegue requiere compilación correcta, validación de variables de entorno y aplicación controlada de las migraciones previamente revisadas.
+
+## 5. Costos y continuidad
+
+Vercel y Supabase ofrecen planes de desarrollo sujetos a sus condiciones de uso. Render dispone de instancias de pago y un servicio gratuito que puede suspenderse por inactividad.
+
+El costo definitivo depende del tráfico, la región, el almacenamiento documental y los requisitos de disponibilidad; por tanto, no se establece una estimación anual sin mediciones y condiciones de servicio definidas.
+
+Una instalación destinada a operaciones humanitarias reales requiere planes con disponibilidad comprobable y mecanismos de recuperación adecuados al riesgo.
+
+**Documentación oficial:**
+
+- Vercel: https://vercel.com/docs/
+- Render: https://render.com/docs/
+- Supabase: https://supabase.com/docs/
+
+Las condiciones de los proveedores deben verificarse antes de contratar o desplegar los servicios.

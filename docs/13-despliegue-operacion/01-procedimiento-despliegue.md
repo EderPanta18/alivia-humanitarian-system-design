@@ -2,48 +2,74 @@
 
 ## 1. Objetivo
 
-Publicar una versión reproducible de frontend, backend y migraciones sin afirmar que existe ya una instalación operativa. Cada despliegue se identifica con commit, versión de migraciones, configuración y evidencia de comprobaciones críticas.
+Establecer un procedimiento reproducible para publicar frontend, backend y migraciones de Alivía.
 
-## 2. Preparación
+Cada despliegue debe identificar los commits de ambos repositorios, la versión de las migraciones, la configuración utilizada y las evidencias de verificación.
 
-1. Seleccionar commit y verificar cambios revisados en frontend y backend.
-2. Ejecutar Biome, TypeScript, pruebas unitarias, integración y compilaciones.
-3. Confirmar secretos en el gestor del proveedor, sin imprimirlos.
-4. Confirmar servicio PostgreSQL accesible desde backend y respaldo reciente.
-5. Evaluar compatibilidad de migraciones: esquema actual, nuevo esquema, índices y posible rollback.
-6. Confirmar URLs HTTPS, DNS, dominios y políticas de cookie/origen.
+Este procedimiento define la publicación prevista y no implica que exista una instalación operativa.
 
-## 3. Orden de ejecución
+## 2. Preparación del despliegue
+
+Antes de publicar una versión se debe:
+
+1. **Seleccionar versiones:** identificar los commits revisados de frontend y backend.
+2. **Verificar calidad:** ejecutar Biome, TypeScript, pruebas unitarias, pruebas de integración y compilaciones.
+3. **Validar secretos:** comprobar su configuración en el gestor del proveedor, sin exponerlos en logs.
+4. **Comprobar persistencia:** verificar la conexión del backend con PostgreSQL y disponer de un respaldo reciente.
+5. **Revisar migraciones:** evaluar compatibilidad entre esquemas, índices y alternativas de reversión.
+6. **Validar comunicaciones:** comprobar HTTPS, DNS, dominios y políticas de cookies y origen.
+
+## 3. Secuencia de publicación
 
 ```mermaid
 flowchart TD
- S[Revision de release] --> T[Pruebas y builds]
- T --> B[Respaldo verificado]
- B --> M[Migraciones de BD]
- M --> A[Desplegar API compatible]
- A --> F[Desplegar frontend]
- F --> H[Comprobar salud y flujos]
- H --> D{Aceptacion}
- D -- Si --> OK[Publicar version]
- D -- No --> R[Reversion compatible o restauracion controlada]
+    S[Revisión de release] --> T[Pruebas y compilaciones]
+    T --> B[Respaldo verificado]
+    B --> M[Aplicar migraciones]
+    M --> A[Desplegar API compatible]
+    A --> F[Desplegar frontend]
+    F --> H[Verificar salud y flujos]
+    H --> D{¿Aceptación satisfactoria?}
+    D -- Sí --> OK[Publicar versión]
+    D -- No --> R[Reversión compatible o restauración controlada]
 ```
 
-El orden presupone migraciones compatibles hacia atrás. Si un cambio rompe compatibilidad, dividirlo en expandir/migrar/contraer a través de versiones; nunca desplegar un esquema incompatible sin ventana y procedimiento controlado.
+Esta secuencia presupone migraciones compatibles con la versión anterior.
 
-## 4. Validación posterior
+Cuando existan cambios incompatibles, se debe utilizar una transición gradual de **expandir, migrar y contraer**, distribuida entre versiones. Un cambio destructivo requiere una ventana de intervención y un procedimiento de recuperación previamente definido.
 
-- `/health/live` y `/health/ready` sin fallos.
-- Login por cada rol y rechazo de entidad ajena.
-- Prueba sintética de solicitud y matching sin datos reales.
-- Revisión de permisos de lectura de Defensa Civil y no divulgación de stock.
-- Generación de documento de prueba en entorno aislado.
-- Verificación de rutas externas sin declarar disponibilidad si fuente está caída.
-- Confirmación de logs, métricas y respaldo activo.
+La publicación solo se considera completada después de superar las verificaciones de aceptación.
 
-## 5. Reversión
+## 4. Validación posterior al despliegue
 
-Ante fallo crítico: impedir nuevas escrituras peligrosas, conservar logs y claves de operación, revertir a versión de código compatible y ejecutar pruebas mínimas. Una migración destructiva requiere restauración planificada de base, no `git revert` como sustituto. Registrar incidente, tiempo de recuperación, cantidad de operaciones afectadas y verificación de saldos.
+Las comprobaciones mínimas incluyen:
 
-## 6. Estado del proceso
+- **Salud:** respuestas correctas de `/health/live` y `/health/ready`.
+- **Autenticación:** inicio de sesión de los cuatro roles y rechazo del acceso a entidades ajenas.
+- **Flujo funcional:** solicitud y matching de prueba con datos sintéticos, sin afectar registros reales.
+- **Autorización:** consultas de Defensa Civil limitadas a sus permisos, sin exponer inventarios privados.
+- **Documentos:** generación de archivos XLSX/PDF de prueba en un entorno aislado.
+- **Integraciones:** comprobación de rutas y fuentes externas, sin presentar servicios no disponibles como operativos.
+- **Observabilidad y recuperación:** verificación de logs, métricas y mecanismos de respaldo activos.
 
-Este procedimiento es una secuencia definida para construcción futura. No se han suministrado despliegues reales ni pruebas de publicación; no corresponde declarar ningún paso como ejecutado.
+Los resultados deben registrarse como evidencia de la versión publicada.
+
+## 5. Reversión y recuperación
+
+Ante un fallo crítico, el procedimiento debe:
+
+1. Restringir temporalmente las escrituras que puedan comprometer la integridad de los datos.
+2. Conservar logs, evidencias y claves de identificación de operaciones.
+3. Revertir a una versión de código compatible con el esquema persistido.
+4. Ejecutar las comprobaciones mínimas de funcionamiento e integridad.
+5. Registrar el incidente, el tiempo de recuperación, las operaciones afectadas y la conciliación de saldos.
+
+Una migración destructiva puede requerir restauración controlada de PostgreSQL. **Revertir un commit no restaura automáticamente los datos modificados.**
+
+La recuperación debe preservar la trazabilidad y evitar correcciones silenciosas de registros históricos.
+
+## 6. Estado de ejecución
+
+El procedimiento constituye una especificación para futuros despliegues.
+
+No se han proporcionado evidencias de publicaciones reales, restauraciones ni pruebas posteriores al despliegue. Por tanto, ninguna etapa se considera ejecutada o aprobada.

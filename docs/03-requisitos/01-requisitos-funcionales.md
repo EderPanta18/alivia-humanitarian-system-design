@@ -1,348 +1,429 @@
 # Especificación de requisitos funcionales de Alivía
 
-**Estado:** especificación funcional de diseño, consolidada con los modelos y macroprocesos prioritarios; no constituye evidencia de software construido. Los identificadores RF heredados conservan su número cuando corresponde, pero su alcance se normaliza según las decisiones confirmadas. `RF-06`, `RF-25` y `RF-30` permanecen reservados y fuera del alcance básico.
+## 1. Convenciones generales
 
-## 1. Convenciones y criterios de redacción
+Esta especificación define las capacidades funcionales de Alivía mediante requisitos identificados como `RF-xx`, con comportamientos y criterios de aceptación verificables.
 
-- **RF:** capacidad observable del sistema, con comportamiento verificable.
-- **Precondición:** estado mínimo necesario para ejecutar la operación.
-- **Criterio de aceptación:** observación que permitiría decidir si una implementación satisface el requisito.
-- **Lectura de roles:** `COM` (Comuna), `ONG`, `BRI` (Brigada), `DC` (Defensa Civil) y `SIS` (sistema automático).
-- **Estados del dominio:** se distingue propuesta, confirmación, autorización, retirada, llegada y recepción.
-- **Ámbito:** un escenario básico de emergencia; integraciones externas planificadas y datos ficticios para prueba.
+**Roles utilizados:**
+
+- `COM`: Jefe de Comuna/Albergue.
+- `ONG`: Jefe de ONG.
+- `BRI`: Jefe de Brigada.
+- `DC`: Jefe de Defensa Civil.
+- `SIS`: Sistema o proceso automático.
+
+Cada requisito identifica el actor responsable, las precondiciones necesarias cuando corresponda y el comportamiento esperado. Los criterios de aceptación permiten comprobar su cumplimiento.
+
+El alcance contempla un escenario de emergencia activo previamente configurado, con datos de prueba e integraciones externas previstas. La especificación no implica que las funcionalidades estén implementadas.
 
 ## 2. Acceso y pertenencia
 
-### RF-01. Autenticación de usuarios
+### RF-01. Autenticar usuarios
 
-**Actor:** COM, ONG, BRI, DC. **Precondición:** cuenta activa configurada.
+**Actor:** COM, ONG, BRI, DC.
 
-**Comportamiento:** el sistema verifica credenciales en el servidor, establece una sesión protegida y presenta las operaciones propias del rol. No concede acceso a cuentas inactivas o credenciales inválidas.
+**Precondición:** cuenta activa configurada.
 
-**Aceptación:** credenciales válidas dan acceso al ámbito correcto; inválidas generan rechazo sin exponer datos restringidos.
+**Comportamiento:** el sistema valida las credenciales en el servidor, establece una sesión protegida y habilita las funciones correspondientes al rol. Rechaza cuentas inactivas o credenciales inválidas.
 
-### RF-02. Autorización por rol y titularidad
+**Aceptación:** un usuario válido accede a su ámbito autorizado; las credenciales incorrectas no permiten ingresar ni exponen información restringida.
 
-**Actor:** SIS. **Precondición:** operación autenticada.
+### RF-02. Autorizar operaciones por rol y titularidad
 
-**Comportamiento:** toda consulta o modificación comprueba permisos y entidad titular del recurso. Defensa Civil únicamente lee datos territoriales y de atención autorizados y el informe final ya publicado.
+**Actor:** SIS.
 
-**Aceptación:** alterar manualmente identificadores de ONG o comunidad en una solicitud de API no permite acceder a registros ajenos.
+**Precondición:** operación autenticada.
 
-### RF-03. Vinculación exclusiva de responsables
+**Comportamiento:** el servidor verifica los permisos del rol y la pertenencia del recurso a la entidad correspondiente antes de permitir consultas o modificaciones. Defensa Civil mantiene acceso exclusivamente de lectura a la información autorizada.
 
-**Actor:** SIS. **Precondición:** usuarios y entidades configurados.
+**Aceptación:** modificar identificadores de comunidad u ONG en una petición a la API no permite acceder ni operar sobre recursos ajenos.
 
-**Comportamiento:** cada jefe de comuna y ONG tiene una única entidad asociada y cada entidad participante tiene un solo jefe en esta versión. Se mantiene objetivo equivalente de jefatura única por brigada; la adecuación de persistencia se justifica posteriormente.
+### RF-03. Garantizar la vinculación exclusiva de responsables
 
-**Aceptación:** no se acepta asignar dos jefes a la misma entidad ni una jefatura simultánea de entidades incompatibles.
+**Actor:** SIS.
 
-## 3. Solicitudes y recepción por comunidad
+**Precondición:** usuarios y entidades configurados.
 
-### RF-04. Registrar una solicitud
+**Comportamiento:** cada jefe de comuna, ONG o brigada representa una única entidad, y cada entidad participante tiene un solo jefe responsable. Estas relaciones deben garantizarse mediante restricciones de unicidad en el almacenamiento.
 
-**Actor:** COM. **Precondición:** sesión válida, comunidad vinculada, escenario de atención habilitado.
+**Aceptación:** no se permite asignar dos jefes a una misma entidad ni vincular un responsable a varias entidades incompatibles.
 
-**Comportamiento:** registrar situación, población afectada, productos del catálogo, cantidades positivas y unidades definidas, en una solicitud con múltiples líneas. La comunidad y el autor se obtienen de la sesión.
+## 3. Solicitudes y recepción comunitaria
 
-**Aceptación:** una solicitud con tres productos se guarda como una solicitud y tres líneas identificables.
+### RF-04. Registrar solicitudes de ayuda
 
-### RF-05. Validar una solicitud
+**Actor:** COM.
 
-**Actor:** SIS. **Precondición:** intento de confirmación.
+**Precondición:** sesión válida, comunidad vinculada y escenario de atención habilitado.
 
-**Comportamiento:** rechazar campos obligatorios ausentes, productos inexistentes/inactivos, cantidades no positivas, unidades incompatibles o producto duplicado en una solicitud; identificar los errores antes de guardar.
+**Comportamiento:** permitir registrar una solicitud con situación de afectación, población afectada y una o varias líneas de productos del catálogo con sus cantidades y unidades. La comunidad y el autor se obtienen de la sesión.
 
-**Aceptación:** cantidad negativa o duplicidad de producto impide confirmar y señala el campo afectado.
+**Aceptación:** una solicitud que contiene tres productos se almacena como un único registro con tres líneas asociadas.
 
-### RF-06. Reservado: edición de solicitud confirmada
+### RF-05. Validar solicitudes
 
-No se considera función activa. La cancelación por jefe está prohibida; una edición posterior requeriría definir antes reglas y trazabilidad.
+**Actor:** SIS.
+
+**Precondición:** intento de confirmación de una solicitud.
+
+**Comportamiento:** validar campos obligatorios, productos activos, cantidades positivas, unidades compatibles y ausencia de productos duplicados. Las solicitudes confirmadas no admiten edición ni cancelación por el jefe de comuna.
+
+**Aceptación:** un producto inexistente, una cantidad inválida o una línea duplicada impiden la confirmación e identifican el error correspondiente.
 
 ### RF-07. Consultar la atención de su comunidad
 
-**Actor:** COM. **Precondición:** solicitud propia existente.
+**Actor:** COM.
 
-**Comportamiento:** mostrar por producto pedido, autorizado pendiente, recibido conforme y sin cobertura; identificar estados de sus despachos, sin mostrar inventarios privados de otras ONG.
+**Precondición:** comunidad vinculada con solicitudes registradas.
 
-**Aceptación:** distingue explícitamente 70 autorizados, 20 conformes y 50 aún comprometidos cuando correspondan a una misma necesidad.
+**Comportamiento:** mostrar las necesidades solicitadas, cantidades autorizadas pendientes, recepciones conformes, saldos sin cobertura y estados de los despachos propios, sin exponer inventarios privados de ONG.
 
-### RF-08. Confirmar recepción de un despacho
+**Aceptación:** el usuario puede distinguir cantidades recibidas conforme de aquellas todavía comprometidas. Por ejemplo, de 70 unidades autorizadas, 20 recibidas conforme y 50 aún comprometidas.
 
-**Actor:** COM. **Precondición:** despacho destinado a su comunidad con llegada registrada.
+### RF-08. Confirmar recepción de despachos
 
-**Comportamiento:** registrar, por línea, cantidades recibidas físicamente y conformes, resultado y fecha/autor; impedir cantidades superiores a las enviadas.
+**Actor:** COM.
 
-**Aceptación:** llegada registrada sin confirmación comunitaria no cuenta como recepción conforme.
+**Precondición:** despacho destinado a su comunidad con llegada registrada.
 
-### RF-09. Registrar observaciones de recepción
+**Comportamiento:** permitir verificar cada línea del despacho y registrar cantidades recibidas físicamente, cantidades conformes, resultado, responsable y fecha. Se impiden recepciones duplicadas y cantidades superiores a las enviadas.
 
-**Actor:** COM. **Precondición:** verificación de una recepción.
+**Aceptación:** la llegada registrada por una brigada no contabiliza productos como recibidos conformes hasta la confirmación comunitaria.
 
-**Comportamiento:** registrar diferencias de cantidad y condición, observaciones y reporte interno cuando no exista conformidad; concluir el registro con observaciones sin devolver automáticamente los faltantes al matching.
+### RF-09. Registrar discrepancias de recepción
 
-**Aceptación:** si se enviaron 20 y llegaron 17, se conservan las tres faltantes y el resultado observado; no aparece nueva autorización automática de reposición.
+**Actor:** COM.
+
+**Precondición:** recepción en proceso de verificación.
+
+**Comportamiento:** registrar faltantes físicos, productos no conformes y observaciones por línea. Cuando existan discrepancias, generar un reporte interno y finalizar la recepción con observaciones, sin reactivar automáticamente el matching por las cantidades afectadas.
+
+**Aceptación:** si se enviaron 20 unidades y llegaron 17, se registran tres faltantes físicos sin crear automáticamente una nueva autorización de reposición.
 
 ## 4. Inventario de ONG
 
-### RF-10. Registrar ingreso de productos
+### RF-10. Registrar ingresos de inventario
 
-**Actor:** ONG. **Precondición:** organización y almacén válidos, producto del catálogo.
+**Actor:** ONG.
 
-**Comportamiento:** registrar cantidad positiva, producto, unidad, almacén, lote y vencimiento cuando aplique; conservar actor, motivo y momento.
+**Precondición:** ONG, almacén y producto válidos.
 
-**Aceptación:** un ingreso confirmado incrementa exactamente una vez el lote correspondiente y deja movimiento rastreable.
+**Comportamiento:** registrar ingresos con cantidad positiva, producto, unidad, almacén, lote y vencimiento cuando corresponda. Cada operación conserva responsable, fecha y motivo.
 
-### RF-11. Consultar inventario utilizable y disponible
+**Aceptación:** un ingreso confirmado incrementa una sola vez la existencia física del lote y genera un movimiento auditable.
 
-**Actor:** ONG. **Precondición:** pertenencia a la ONG.
+### RF-11. Consultar inventario y disponibilidad
 
-**Comportamiento:** mostrar stock físico, aptitud del lote, cantidades autorizadas pendientes de retiro y cantidad ofertable, sin inventarios ajenos.
+**Actor:** ONG.
 
-**Aceptación:** 150 unidades utilizables con 40 autorizadas y aún no retiradas muestran 110 disponibles para nuevas asignaciones.
+**Precondición:** usuario vinculado a la organización.
 
-### RF-12. Registrar ajuste de inventario
+**Comportamiento:** mostrar existencias físicas, condición de los lotes, cantidades autorizadas pendientes de retiro y disponibilidad para nuevas asignaciones, restringidas a los almacenes propios.
 
-**Actor:** ONG. **Precondición:** existencia de lote propio.
+**Aceptación:** 150 unidades utilizables con 40 comprometidas y no retiradas muestran 110 disponibles para asignar.
 
-**Comportamiento:** admitir ajuste justificado conservando movimiento, fecha y responsable; impedir stock físico negativo y reducciones incompatibles con compromisos autorizados vigentes.
+### RF-12. Registrar ajustes de inventario
 
-**Aceptación:** no se confirma un ajuste que deje menos unidades aptas de las que siguen comprometidas.
+**Actor:** ONG.
+
+**Precondición:** lote perteneciente a su organización.
+
+**Comportamiento:** permitir ajustes justificados con trazabilidad de responsable, fecha y causa. Se rechazan operaciones que generen existencias negativas o reduzcan la disponibilidad por debajo de los compromisos vigentes.
+
+**Aceptación:** no se confirma un ajuste que deje menos unidades aptas que las ya autorizadas y pendientes de retiro.
 
 ## 5. Motor automático de matching
 
-### RF-13. Identificar demanda elegible
+### RF-13. Identificar necesidades elegibles
 
-**Actor:** SIS. **Precondición:** solicitudes confirmadas.
+**Actor:** SIS.
 
-**Comportamiento:** determinar por línea la cantidad nunca cubierta, excluyendo recibidos conformes y autorizaciones vigentes aún destinadas a la solicitud; no reactivar faltantes de una recepción ya finalizada.
+**Precondición:** solicitudes confirmadas.
 
-**Aceptación:** una propuesta pendiente no reduce demanda, una autorización vigente sí la excluye de nuevas propuestas.
+**Comportamiento:** calcular por línea las cantidades pendientes de cobertura, excluyendo recepciones conformes y compromisos vigentes. Los faltantes de recepciones finalizadas no reingresan automáticamente al matching.
+
+**Aceptación:** una propuesta pendiente no reduce la demanda sin cobertura; una autorización vigente sí excluye las cantidades comprometidas de nuevas propuestas.
 
 ### RF-14. Cruzar necesidades con existencias aptas
 
-**Actor:** SIS. **Precondición:** inventarios por lote y catálogo disponibles.
+**Actor:** SIS.
 
-**Comportamiento:** considerar solo producto y unidad compatibles, lotes aptos, cantidades no comprometidas y múltiplos permitidos; excluir vencidos, bloqueados y cuarentena.
+**Precondición:** solicitudes, catálogo e inventarios disponibles.
 
-**Aceptación:** un lote vencido nunca resulta candidato, aunque conserve existencia física positiva.
+**Comportamiento:** seleccionar existencias compatibles por producto, unidad y múltiplo de entrega, excluyendo cantidades comprometidas y lotes vencidos, bloqueados o en cuarentena. No se realizan sustituciones ni conversiones automáticas no autorizadas.
 
-### RF-15. Seleccionar según prioridad y FEFO
+**Aceptación:** un lote vencido o una unidad incompatible nunca se seleccionan como oferta válida.
 
-**Actor:** SIS. **Precondición:** demanda competidora y/o varios lotes aptos.
+### RF-15. Priorizar necesidades y seleccionar lotes mediante FEFO
 
-**Comportamiento:** aplicar criterios de criticidad, población afectada y antigüedad y seleccionar lotes con FEFO. La fórmula de diseño usa criticidad normalizada (50 %), población normalizada frente a 1 000 personas (30 %) y antigüedad hasta siete días (20 %). Desempate: fecha de solicitud ascendente y UUID ascendente. Los múltiplos del catálogo limitan la cantidad asignable.
+**Actor:** SIS.
 
-**Aceptación:** el resultado conserva justificación y, entre lotes utilizables equivalentes, considera primero vencimiento más cercano.
+**Precondición:** necesidades elegibles y existencias aptas.
 
-### RF-16. Generar propuestas independientes por ONG
+**Comportamiento:** ordenar las necesidades mediante la política determinista de prioridad y seleccionar lotes utilizables según FEFO, respetando sus vencimientos y múltiplos de entrega.
 
-**Actor:** SIS. **Precondición:** oferta compatible.
+La prioridad se calcula mediante:
 
-**Comportamiento:** crear propuestas por ONG/solicitud con líneas, cantidades, comunidad y origen pertinente. No consumir ni comprometer recursos en esta fase.
+`score = 0,50 × criticidad_normalizada + 0,30 × min(población / 1000, 1) + 0,20 × min(antigüedad_días / 7, 1)`
 
-**Aceptación:** una solicitud puede originar más de una propuesta; aprobar una no aprueba la otra.
+Cada factor se normaliza al intervalo `[0,1]`. Los empates se resuelven por solicitud más antigua y UUID ascendente.
 
-### RF-17. Controlar vigencia de propuestas
+Esta puntuación es una política de software, no una clasificación institucional de urgencia.
 
-**Actor:** SIS. **Precondición:** propuesta pendiente.
+**Aceptación:** el orden de prioridades es reproducible y, entre lotes equivalentes utilizables, se considera primero el vencimiento más próximo que permita una entrega y consumo oportunos.
 
-**Comportamiento:** detectar cambios relevantes en inventario o cobertura y revalidar antes de confirmar/autorizar; rechazar decisiones basadas en cantidades obsoletas.
+### RF-16. Generar propuestas por ONG
 
-**Aceptación:** una propuesta de 70 no puede convertirse en autorización de 70 si solo existen 50 disponibles.
+**Actor:** SIS.
 
-### RF-18. Mostrar faltantes sin cobertura
+**Precondición:** demanda elegible y oferta compatible.
 
-**Actor:** SIS. **Precondición:** necesidad parcialmente atendida.
+**Comportamiento:** generar propuestas independientes por ONG y solicitud, identificando productos, cantidades, comunidad destinataria y origen correspondiente. Las propuestas no reservan ni descuentan inventario.
 
-**Comportamiento:** calcular y exponer demanda pendiente de compromiso separada de demanda todavía no recibida conforme, sin tratar una propuesta como entrega.
+**Aceptación:** una solicitud puede recibir propuestas de distintas ONG; confirmar una no confirma ni compromete las demás.
 
-**Aceptación:** si se requieren 100 y únicamente se proponen 70, siguen figurando 100 no recibidas y 100 sin autorización hasta que haya decisión válida.
+### RF-17. Controlar la vigencia de propuestas
 
-## 6. Decisiones de ONG y autorización
+**Actor:** SIS.
 
-### RF-19. Bandeja de propuestas propias
+**Precondición:** propuesta pendiente de decisión.
 
-**Actor:** ONG. **Precondición:** propuestas asociadas a su ONG.
+**Comportamiento:** detectar cambios relevantes de inventario o cobertura y revalidar las condiciones antes de confirmar o autorizar aportes. No se aceptan cantidades que hayan dejado de estar disponibles.
 
-**Comportamiento:** consultar productos, cantidades, destino, justificación, estado y disponibilidad relevante de su organización, sin propuestas privadas ajenas.
+**Aceptación:** una propuesta de 70 unidades no puede autorizarse íntegramente si solo quedan 50 disponibles.
 
-**Aceptación:** un jefe de ONG no puede aprobar ni leer propuestas privadas de otra ONG.
+### RF-18. Mostrar necesidades sin cobertura
 
-### RF-20. Confirmar, reducir o rechazar un aporte
+**Actor:** SIS.
 
-**Actor:** ONG. **Precondición:** propuesta válida.
+**Precondición:** solicitud confirmada con necesidades pendientes.
 
-**Comportamiento:** confirmar cantidades iguales o menores a las propuestas; si la respuesta resulta cero en todos los productos, rechazar con motivo. Conservar decisión y cantidades no aceptadas.
+**Comportamiento:** presentar separadamente cantidades sin compromiso vigente y cantidades todavía no recibidas conforme. Las propuestas no se contabilizan como autorizaciones ni entregas.
 
-**Aceptación:** no se admite aumento superior a lo propuesto; el rechazo no cancela la solicitud comunitaria.
+**Aceptación:** si una comunidad solicita 100 unidades y recibe propuestas por 70, las 100 continúan sin autorización y sin recepción hasta que se registren las operaciones correspondientes.
 
-### RF-21. Comprometer de forma atómica al autorizar
+## 6. Decisiones y autorizaciones de ONG
 
-**Actor:** SIS. **Precondición:** disponibilidad confirmada y acción posterior de autorización.
+### RF-19. Consultar propuestas propias
 
-**Comportamiento:** revalidar stock y cobertura al autorizar; excluir la cantidad autorizada de la disponibilidad para nuevas asignaciones mediante operación atómica. No se crea una reserva independiente al confirmar ni se descuenta stock físico antes del retiro.
+**Actor:** ONG.
 
-**Aceptación:** dos autorizaciones simultáneas de 80 unidades cuando solo hay 100 disponibles no pueden comprometer 160.
+**Precondición:** propuestas dirigidas a su organización.
 
-### RF-22. Autorizar salida
+**Comportamiento:** mostrar productos, cantidades, destino, justificación, estado y disponibilidad relevante para decidir el aporte, sin permitir acceso a propuestas de otras ONG.
 
-**Actor:** ONG. **Precondición:** decisión de aporte confirmada.
+**Aceptación:** un jefe de ONG solo puede consultar y responder propuestas destinadas a su organización.
 
-**Comportamiento:** registrar una autorización explícita, identificando responsable, fecha, productos, almacén y destino; habilitar despacho sin registrar retiro físico.
+### RF-20. Confirmar, reducir o rechazar aportes
 
-**Aceptación:** una propuesta confirmada pero no autorizada no aparece como retiro habilitado.
+**Actor:** ONG.
 
-### RF-23. Registrar descuento físico asociado al retiro
+**Precondición:** propuesta vigente.
 
-**Actor:** SIS, a partir de confirmación de BRI. **Precondición:** despacho autorizado, ruta válida y retirada completa verificada.
+**Comportamiento:** permitir confirmar cantidades iguales o inferiores a las propuestas. Una respuesta con todas las cantidades en cero se registra como rechazo con motivo obligatorio. Las cantidades no aceptadas permanecen sin cobertura.
 
-**Comportamiento:** descontar una sola vez la totalidad retirada y dejar movimiento de inventario ligado al despacho; impedir doble descuento o presentación de éxito no confirmado.
+**Aceptación:** no se pueden aumentar cantidades propuestas y un rechazo no cancela la solicitud comunitaria.
 
-**Aceptación:** un retiro de 50 confirmado dos veces produce un único descuento físico de 50.
+### RF-21. Comprometer existencias de forma atómica
+
+**Actor:** SIS.
+
+**Precondición:** disponibilidad confirmada y solicitud posterior de autorización.
+
+**Comportamiento:** revalidar atómicamente inventario y cobertura antes de comprometer cantidades. La autorización reduce la disponibilidad para nuevas asignaciones, pero no descuenta las existencias físicas ni requiere crear una reserva independiente.
+
+**Aceptación:** dos autorizaciones simultáneas de 80 unidades sobre una disponibilidad de 100 no pueden comprometer 160.
+
+### RF-22. Autorizar la salida de aportes
+
+**Actor:** ONG.
+
+**Precondición:** disponibilidad confirmada.
+
+**Comportamiento:** registrar una autorización explícita con responsable, fecha, productos, cantidades, almacén y destino. Cada despacho corresponde a un almacén; no se contempla optimizar recorridos con múltiples puntos de recojo.
+
+La autorización habilita el despacho, sin representar un retiro físico.
+
+**Aceptación:** un aporte confirmado, pero no autorizado, no puede retirarse ni aparecer como despacho habilitado para retiro.
+
+### RF-23. Registrar descuento físico por retiro
+
+**Actor:** SIS, a partir de la confirmación de BRI.
+
+**Precondición:** despacho autorizado, ruta válida y retiro completo verificado.
+
+**Comportamiento:** descontar una sola vez las cantidades retiradas y registrar el movimiento correspondiente, vinculado al despacho. Los reintentos no generan descuentos duplicados ni muestran éxito sin confirmación.
+
+**Aceptación:** confirmar repetidamente un retiro de 50 unidades produce un único descuento físico de 50.
 
 ## 7. Brigada, rutas y despachos
 
 ### RF-24. Consultar despachos asignados
 
-**Actor:** BRI. **Precondición:** usuario autenticado y despachos vinculados.
+**Actor:** BRI.
 
-**Comportamiento:** mostrar origen, destino, productos, cantidades autorizadas y estado de despachos asignados, sin datos de vehículos o conductores.
+**Precondición:** sesión válida y despachos vinculados a su brigada.
 
-**Aceptación:** una brigada no cambia despachos ni aportes de otra.
+**Comportamiento:** mostrar origen, destino, productos, cantidades autorizadas y estado logístico de los despachos asignados, sin funciones de administración de vehículos o conductores.
 
-### RF-25. Eliminado: transportistas y vehículos
+**Aceptación:** una brigada no puede consultar operativamente ni modificar despachos ajenos.
 
-No se introduce gestión de conductores, vehículos, matrículas o asignación interna de transportistas.
+### RF-26. Consultar rutas verificadas
 
-### RF-26. Consultar ruta verificada antes del retiro
+**Actor:** BRI/SIS.
 
-**Actor:** BRI/SIS. **Precondición:** despacho autorizado.
+**Precondición:** despacho autorizado.
 
-**Comportamiento:** calcular y mostrar ruta candidata considerando vías reportadas como intransitables; registrar disponibilidad, fecha de verificación y origen de restricciones. Sin ruta válida no se confirma retiro.
+**Comportamiento:** calcular y presentar una ruta entre almacén y comunidad utilizando la información vial disponible. La verificación conserva fecha, hora y procedencia de las restricciones.
 
-**Aceptación:** un tramo marcado como `IMPASSABLE` no integra una ruta calificada como utilizable; ausencia de ruta bloquea retirada.
+Una ruta es utilizable únicamente cuando no contiene tramos `IMPASSABLE`, no depende de tramos `UNKNOWN` y su verificación tiene menos de treinta minutos de antigüedad.
+
+**Aceptación:** las rutas bloqueadas, desconocidas o con verificación vencida no se consideran disponibles y requieren una nueva evaluación.
 
 ### RF-27. Registrar retiro completo y llegada
 
-**Actor:** BRI. **Precondición:** autorización y ruta verificada para retiro; posteriormente retiro completado para llegada.
+**Actor:** BRI.
 
-**Comportamiento:** verificar la totalidad autorizada sin modificar cantidades y registrar la llegada del despacho con responsable y momento; no convertir llegada en recepción conforme.
+**Precondición:** despacho autorizado y ruta válida para el retiro; retiro completado para registrar llegada.
 
-**Aceptación:** una cantidad parcial no se confirma como retiro; registrar llegada habilita la verificación del destinatario, no la sustituye.
+**Comportamiento:** permitir confirmar únicamente el retiro total de las cantidades autorizadas. Posteriormente, registrar la llegada al destino con usuario, fecha y hora, sin asumir recepción conforme.
+
+**Aceptación:** no se admite un retiro parcial. La llegada habilita la verificación comunitaria, pero no sustituye su confirmación.
 
 ## 8. Supervisión y resultados
 
-### RF-28. Generar informe final por evento de cierre
+### RF-28. Generar informe final de emergencia
 
-**Actor:** SIS. **Precondición:** evento preconfigurado `EMERGENCIA_FINALIZADA` para el escenario.
+**Actor:** SIS.
 
-**Comportamiento:** consolidar un informe fechado de resultados, solicitudes, asignaciones, envíos, recepciones, brechas e incidencias. Publicarlo en solo lectura tras el evento, exactamente una vez por evento.
+**Precondición:** recepción del evento preconfigurado `EMERGENCIA_FINALIZADA`.
 
-**Aceptación:** el informe no se publica durante la emergencia activa; reintentar evento no produce duplicados.
+**Comportamiento:** consolidar solicitudes, autorizaciones, despachos, recepciones, cantidades atendidas, brechas e incidencias, conservando la fecha y hora de corte.
 
-### RF-29. Conservar trazabilidad en informe final
+El informe se genera una sola vez por evento y se publica para consulta de Defensa Civil. Los reintentos no duplican ni modifican silenciosamente su contenido.
 
-**Actor:** SIS. **Precondición:** informe final generado.
+**Aceptación:** el informe final no se publica durante la emergencia activa y un evento repetido no crea otro informe.
 
-**Comportamiento:** incluir secuencia de acciones y responsables con fechas, cantidades y relaciones relevantes para comprender decisiones y diferencias.
+### RF-29. Incorporar trazabilidad al informe final
 
-**Aceptación:** se puede distinguir quién solicitó 100, autorizó 70, retiró 70 y confirmó 65 conformes.
+**Actor:** SIS.
 
-### RF-30. Eliminado: reportes operativos generales del MVP anterior
+**Precondición:** consolidación final del escenario.
 
-No se incorpora una función de generación arbitraria de reportes finales mientras el escenario esté abierto. Las consultas territoriales de lectura autorizadas siguen siendo una capacidad distinta.
+**Comportamiento:** incluir las operaciones y responsables necesarios para reconstruir solicitudes, decisiones, movimientos y diferencias de recepción, con sus fechas y cantidades correspondientes.
 
-### RF-31. Proteger consultas de Defensa Civil
+**Aceptación:** el informe permite identificar quién solicitó 100 unidades, autorizó 70, retiró 70 y confirmó 65 conformes.
 
-**Actor:** DC. **Precondición:** sesión con rol `defensaCivil`.
+### RF-31. Proteger las consultas de Defensa Civil
 
-**Comportamiento:** ofrecer consultas de solo lectura de riesgo, atención, entregas y brechas; permitir además acceder a informes finales publicados, sin modificar registros o consultar existencias/lotes privados de ONG.
+**Actor:** DC.
 
-**Aceptación:** la supervisión durante la operación es posible, pero un informe final no es visible antes del evento de cierre.
+**Precondición:** sesión con rol `defensaCivil`.
 
-## 9. Restricciones transversales
+**Comportamiento:** permitir consultas de solo lectura sobre riesgos, atención, entregas y brechas territoriales, así como informes finales ya publicados. Se excluyen modificaciones operativas e inventarios privados de ONG.
 
-### RF-32. Validar cambios de estado
+**Aceptación:** Defensa Civil puede supervisar la emergencia activa, pero no consultar su informe final antes del evento de cierre ni modificar información operativa.
 
-**Actor:** SIS. **Comportamiento:** impedir transiciones inconsistentes entre solicitud, propuesta, autorización, despacho y recepción.
+## 9. Integridad y trazabilidad
 
-**Aceptación:** no se confirma recepción de un despacho sin llegada ni se descuenta inventario sin retiro completo válido.
+### RF-32. Validar transiciones de estado
 
-### RF-33. Calcular saldos sin cobertura duplicada
+**Actor:** SIS.
 
-**Actor:** SIS. **Comportamiento:** distinguir cantidad solicitada, nunca cubierta, comprometida, enviada, recibida y conforme, sin reactivar faltantes de recepciones finalizadas.
+**Comportamiento:** impedir cambios de estado incompatibles con la secuencia funcional de solicitudes, propuestas, autorizaciones, despachos y recepciones.
 
-**Aceptación:** ningún mismo aporte se contabiliza dos veces como cobertura.
+**Aceptación:** no se confirma una recepción sin llegada registrada ni se descuenta inventario sin un retiro completo válido.
+
+### RF-33. Calcular cantidades sin duplicar cobertura
+
+**Actor:** SIS.
+
+**Comportamiento:** diferenciar cantidades solicitadas, nunca cubiertas, comprometidas, enviadas, recibidas físicamente y conformes, sin reactivar automáticamente los faltantes de recepciones finalizadas.
+
+**Aceptación:** una misma cantidad no se contabiliza dos veces como cobertura ni una propuesta se interpreta como ayuda recibida.
 
 ### RF-34. Registrar trazabilidad operativa
 
-**Actor:** SIS. **Comportamiento:** conservar eventos críticos con actor, rol, entidad, fecha/hora, objeto y cantidades pertinentes; correcciones no sobrescriben hechos históricos.
+**Actor:** SIS.
 
-**Aceptación:** la secuencia de operaciones puede reconstruirse sin perder eventos previos.
+**Comportamiento:** conservar las acciones críticas con usuario, rol, entidad, objeto, fecha, hora y cantidades pertinentes. Las correcciones generan nuevos registros sin eliminar hechos anteriores.
 
-### RF-35. Mantener relaciones consistentes entre operaciones
+**Aceptación:** se puede reconstruir la secuencia de operaciones, sus responsables y resultados sin perder el historial.
 
-**Actor:** SIS. **Comportamiento:** validar pertenencia de producto, lote, solicitud, propuesta, autorización, despacho y recepción, impidiendo referencias cruzadas incoherentes.
+### RF-35. Mantener relaciones consistentes
 
-**Aceptación:** una recepción no puede asociarse a líneas de un despacho ajeno ni a la comunidad equivocada.
+**Actor:** SIS.
 
-## 10. Capacidades confirmadas para esta versión ampliada
+**Comportamiento:** validar las relaciones entre solicitudes, productos, lotes, propuestas, autorizaciones, despachos y recepciones, evitando referencias incompatibles o asociaciones con entidades ajenas.
 
-Los siguientes IDs comienzan tras el conjunto histórico y representan decisiones adicionales compatibles con los modelos priorizados.
+**Aceptación:** una recepción no puede contener líneas de otro despacho ni atribuirse a una comunidad diferente de su destinataria.
+
+## 10. Riesgo territorial, información externa y documentos
 
 ### RF-36. Registrar evaluaciones de riesgo territorial
 
-**Actor:** SIS, por integración o carga autorizada. **Precondición:** comunidad y categorías válidas.
+**Actor:** SIS, mediante integración o carga autorizada.
 
-**Comportamiento:** registrar desastre, nivel de severidad, fuente y fecha de evaluación, conservando historial y sin alterar riesgo por entregas de ayuda.
+**Precondición:** comunidades y categorías territoriales válidas.
 
-**Aceptación:** una nueva evaluación no borra las anteriores; una recepción no cambia el nivel de riesgo.
+**Comportamiento:** registrar evaluaciones por comunidad y tipo de desastre, conservando nivel, fuente, fecha e historial. Las entregas humanitarias no modifican automáticamente el riesgo.
 
-### RF-37. Presentar mapa territorial para supervisión
+**Aceptación:** una nueva evaluación conserva las anteriores y la recepción de ayuda no cambia por sí sola el nivel registrado.
 
-**Actor:** DC. **Comportamiento:** visualizar comunidades y evaluaciones de riesgo, junto con estado de atención representado separadamente. Mostrar procedencia/fecha de riesgo y evitar equiparar colores de riesgo y atención.
+### RF-37. Presentar mapa de riesgo y atención
 
-**Aceptación:** una comunidad atendida puede seguir figurando con riesgo elevado.
+**Actor:** DC.
+
+**Comportamiento:** visualizar comunidades y evaluaciones territoriales con sus fuentes y fechas, diferenciando el riesgo del estado de atención. Los fenómenos y fuentes se representan individualmente, sin consolidar desastres distintos en un único nivel.
+
+**Aceptación:** una comunidad puede figurar como atendida y conservar un nivel de riesgo elevado, sin contradicción entre los indicadores.
 
 ### RF-38. Consultar entregas y brechas territoriales
 
-**Actor:** DC. **Comportamiento:** consultar cantidades efectivamente confirmadas y necesidades no cubiertas por zona, producto y fecha cuando esos datos existan, sin mostrar lotes o inventarios privados.
+**Actor:** DC.
 
-**Aceptación:** una llegada no cuenta como recepción conforme y las consultas no permiten cambios de estado.
+**Comportamiento:** consultar entregas confirmadas y necesidades pendientes por zona, producto y periodo, según los datos disponibles. La información no expone lotes ni inventarios privados.
 
-### RF-39. Ingerir observaciones y alertas externas
+**Aceptación:** los despachos que únicamente registran llegada no cuentan como recibidos conformes y ninguna consulta permite alterar operaciones.
 
-**Actor:** SIS. **Comportamiento:** incorporar datos identificados de fuentes externas previstas, conservando origen, fecha y condición de verificación; permitir avisos informativos a usuarios autorizados sin declarar automáticamente emergencias.
+### RF-39. Incorporar observaciones y alertas externas
 
-**Aceptación:** un evento externo puede figurar como observación o alerta, nunca como declaración oficial automática por el solo hecho de haberse importado.
+**Actor:** SIS.
 
-### RF-40. Generar documentos finales por despacho
+**Comportamiento:** importar observaciones y alertas mediante adaptadores backend, conservando fuente, fecha y estado de validación, con controles de frecuencia y condiciones de uso.
 
-**Actor:** SIS. **Precondición:** recepción finalizada, conforme o con observaciones.
+Los datos inválidos no actualizan evaluaciones de riesgo. Los avisos pueden mostrarse a usuarios autorizados, pero no declaran emergencias automáticamente.
 
-**Comportamiento:** generar manifiesto Excel de lo enviado y acta PDF de lo recibido, ambos vinculados al despacho y recepción sin duplicación por reintentos.
+**Aceptación:** un reporte externo se identifica como observación o alerta con procedencia verificable, sin generar por sí solo una declaración institucional de emergencia.
 
-**Aceptación:** una recepción observada genera ambos documentos; el reporte interno de discrepancias no se confunde con el acta PDF.
+### RF-40. Generar documentos por despacho
 
-### RF-41. Impedir confirmación cuando no exista ruta disponible
+**Actor:** SIS.
 
-**Actor:** SIS. **Precondición:** despacho autorizado.
+**Precondición:** recepción finalizada, conforme o con observaciones.
 
-**Comportamiento:** bloquear retiro físico registrado si no existe ruta evaluada como disponible o si alguna vía reportada intransitable forma parte del recorrido. Una verificación de ruta con treinta minutos cumplidos debe renovarse; vías `UNKNOWN` o `IMPASSABLE` impiden confirmar el retiro.
+**Comportamiento:** generar un manifiesto Excel con los productos enviados y un acta PDF con las cantidades recibidas y observaciones, vinculados al despacho correspondiente.
 
-**Aceptación:** sin ruta disponible el inventario no sufre un descuento asociado a ese despacho.
+Cada tipo de documento se genera una sola vez por despacho. El reporte interno de discrepancias no constituye un PDF adicional.
 
-## 11. Criterios técnicos complementarios
+**Aceptación:** una recepción con observaciones produce ambos documentos y los reintentos no generan duplicados.
 
-| Tema | Comportamiento elegido |
-|---|---|
-| Prioridad | Fórmula relativa determinista de 50/30/20, referencias de 1 000 personas y siete días, orden estable; no representa un índice institucional oficial. |
-| Rutas | Evaluación de máximo treinta minutos, exclusión de `UNKNOWN` e `IMPASSABLE` y revalidación antes de retiro. |
-| Emergencias | Contexto de emergencia autorizado y precargado; cierre por `EMERGENCIA_FINALIZADA` preconfigurado, sin nuevo rol humano. |
-| Fuentes externas | Adaptadores backend con metadatos de origen y controles de frecuencia/licencia; datos no válidos no actualizan riesgo. |
-| Varios almacenes | Un despacho por almacén; no optimización de recorrido con múltiples puntos de recojo. |
+### RF-41. Bloquear retiros sin ruta disponible
 
-## 12. Ejemplo transversal de aceptación
+**Actor:** SIS.
 
-Datos ficticios: se solicitan 100 kits. Dos ONG proponen 60 y 40. Una ONG autoriza 60; la otra no autoriza. Solo 60 quedan comprometidos y 40 nunca cubiertos siguen elegibles. La brigada no puede retirar los 60 sin ruta válida ni aceptar solo 55 como retiro completo. Tras retirar 60 y registrar llegada, la comunidad confirma 58 conformes y dos dañados: la recepción se finaliza con observaciones, se generan los dos documentos y las dos unidades observadas no regresan automáticamente al matching. Defensa Civil visualiza riesgo y atención como indicadores distintos y recibe el informe final solamente tras `EMERGENCIA_FINALIZADA`.
+**Precondición:** despacho autorizado con intento de confirmación de retiro.
+
+**Comportamiento:** verificar que exista una ruta utilizable según `RF-26` antes de permitir el retiro completo. Si la ruta no cumple las condiciones, se bloquea la operación sin modificar el inventario.
+
+**Aceptación:** un despacho sin ruta válida no puede registrar retiro ni producir descuentos de existencias físicas.
+
+## 11. Escenario integral de aceptación
+
+Una comunidad solicita 100 kits. El matching genera propuestas de 60 y 40 unidades para dos ONG. Solo una autoriza sus 60 unidades, mientras las otras 40 permanecen sin cobertura.
+
+La brigada debe contar con una ruta válida y verificar los 60 kits antes de confirmar el retiro completo. El sistema descuenta esa cantidad una sola vez.
+
+Tras registrar la llegada, la comunidad confirma 58 kits conformes y dos dañados. La recepción finaliza con observaciones, se generan el manifiesto Excel y el acta PDF, y las dos unidades no conformes no reingresan automáticamente al matching.
+
+Defensa Civil consulta los resultados de atención y el riesgo territorial por separado. El informe consolidado permanece inaccesible hasta que se procese `EMERGENCIA_FINALIZADA`.

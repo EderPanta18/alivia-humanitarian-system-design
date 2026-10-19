@@ -1,71 +1,183 @@
 # Contratos de API REST
 
-## 1. Convenciones de contrato
+## 1. Convenciones generales
 
-Los endpoints listados constituyen la interfaz seleccionada para el diseño, no evidencia de que estén implementados. Prefijo común `/v1`; los recursos se identifican por UUID; peticiones JSON validadas por DTO y esquema; respuestas tipadas.
+Alivía expone una API REST con prefijo `/v1`, recursos identificados mediante UUID y comunicación JSON sobre HTTPS.
 
-```json
-{"success":true,"data":{"id":"uuid","status":"OPEN"},"meta":{"requestId":"uuid"}}
-```
+Las peticiones se validan mediante DTO y esquemas, mientras que las respuestas mantienen una estructura tipada.
 
-Para paginación: `page`, `pageSize`, `totalItems`, `totalPages`; `pageSize` predeterminado 20 y máximo 100. En errores se devuelve `application/problem+json`, sin `success=true`.
-
-## 2. Catálogo de operaciones
-
-| Método y ruta | Actor | Efecto |
-|---|---|---|
-| `POST /v1/auth/login` | Todos | Crea sesión y cookie HttpOnly. |
-| `POST /v1/auth/logout` | Todos | Revoca sesión/cookie. |
-| `GET /v1/auth/me` | Todos | Devuelve rol, identidad y entidad de alcance. |
-| `GET /v1/catalog/products` | Comuna, ONG | Productos activos, unidades y múltiplos. |
-| `POST /v1/requests` | Comuna | Crea solicitud confirmada de su propia comunidad. |
-| `GET /v1/requests` | Comuna | Solicitudes de su comunidad, paginadas. |
-| `GET /v1/requests/{id}` | Comuna | Detalle, cobertura y recepciones vinculadas. |
-| `GET /v1/ong/stocks` | ONG | Existencias de sus propios almacenes. |
-| `POST /v1/ong/stocks/entries` | ONG | Registra entrada válida y movimiento. |
-| `POST /v1/ong/stocks/adjustments` | ONG | Ajuste justificado con validación de compromisos. |
-| `GET /v1/ong/proposals` | ONG | Propuestas propias con cantidad y prioridad. |
-| `POST /v1/ong/proposals/{id}/confirm` | ONG | Confirma cantidades iguales o menores a las propuestas. |
-| `POST /v1/ong/proposals/{id}/reject` | ONG | Rechaza con motivo obligatorio. |
-| `POST /v1/ong/proposals/{id}/authorize` | ONG | Autoriza salida y compromete stock atómicamente. |
-| `GET /v1/brigade/dispatches` | Brigada | Despachos propios autorizados y estados. |
-| `GET /v1/brigade/dispatches/{id}/route` | Brigada | Ruta y evidencia de vigencia disponibles. |
-| `POST /v1/brigade/dispatches/{id}/withdraw` | Brigada | Retiro completo y descuento idempotente. |
-| `POST /v1/brigade/dispatches/{id}/arrive` | Brigada | Registra llegada con fecha de servidor. |
-| `POST /v1/receipts` | Comuna | Confirma única recepción por despacho dirigido a la comunidad. |
-| `GET /v1/receipts/{id}` | Comuna | Resultado propio conforme o con observaciones. |
-| `GET /v1/dispatches/{id}/documents` | ONG, Comuna, Brigada según titularidad | Metadatos y enlaces autorizados de documentos finales. |
-| `GET /v1/supervision/territory` | Defensa Civil | Riesgo territorial por comunidad/fenómeno. |
-| `GET /v1/supervision/coverage` | Defensa Civil | Brechas, autorizado, enviado y recibido conforme. |
-| `GET /v1/supervision/deliveries` | Defensa Civil | Entregas finalizadas, filtros por zona/producto/fecha. |
-| `GET /v1/supervision/final-reports` | Defensa Civil | Informes ya publicados, sin datos privados de stock. |
-
-Los procesos internos de matching, ingesta y cierre no necesitan endpoints públicos para actores humanos. Se ejecutan por eventos autorizados del servidor; nunca mediante una URL pública que declare emergencias.
-
-## 3. Ejemplo de creación de solicitud
+**Respuesta exitosa:**
 
 ```json
 {
- "affectedPopulation":80,
- "situation":"Inundación con acceso limitado",
- "items":[
-  {"productId":"producto-uuid-1","quantity":"100"},
-  {"productId":"producto-uuid-2","quantity":"20"}
- ]
+    "success": true,
+    "data": {
+        "id": "uuid",
+        "status": "OPEN"
+    },
+    "meta": {
+        "requestId": "uuid"
+    }
 }
 ```
 
-La comunidad y emergencia activa provienen de la sesión y contexto de escenario. Los UUID son marcadores de ejemplo, no IDs reales. Respuesta `201` con solicitud, líneas y estado `OPEN`. Dos líneas del mismo producto o una cantidad no positiva devuelven `422`.
+Las consultas paginadas incluyen `page`, `pageSize`, `totalItems` y `totalPages`, con un tamaño de página predeterminado de 20 y máximo de 100.
 
-## 4. Contratos críticos
+Los errores utilizan `application/problem+json`, sin incluir `success: true`.
 
-- **Confirmación ONG:** `items:[{matchingItemId,confirmedQuantity}]`; `0 <= confirmed <= proposed`, rechazo si todas son cero. Se guarda responsable y fecha.
-- **Autorización:** cuerpo de comando sin cantidades editables; estado de propuesta `CONFIRMED`; encabezado `Idempotency-Key` obligatorio.
-- **Retiro:** `confirmFullWithdrawal:true`; solo después de ruta `AVAILABLE` vigente y coincidencia total con lo autorizado; clave idempotente.
-- **Recepción:** `dispatchId`, `items:[{dispatchItemId,receivedQuantity,conformingQuantity,observations}]`, `observations` generales; servidor deriva `missingQuantity` y resultado. Clave idempotente.
-- **Lectura de mapa:** campos `communityId`, `coordinates`, `catastrophe`, `riskLevel`, `source`, `assessedAt`; `coverage` se presenta separado como información de atención.
-- **Control de acceso:** `403` ante entidad ajena, aun si se manipula la URL; el cliente no decide el propietario.
+Estos contratos definen la interfaz prevista y no implican que los endpoints ya estén implementados.
 
-## 5. Versionado
+## 2. Catálogo de endpoints
 
-Cambios compatibles pueden agregar propiedades opcionales; renombrar/cambiar significado de propiedades obliga a nueva versión mayor o transición explícita. El contrato se prueba con ejemplos y validación automática; no se propaga una URL de pantalla dentro del modelo de dominio.
+| Método y ruta                               | Actor                | Operación                                                         |
+| ------------------------------------------- | -------------------- | ----------------------------------------------------------------- |
+| `POST /v1/auth/login`                       | Todos                | Autenticar usuario y establecer sesión mediante cookie HttpOnly.  |
+| `POST /v1/auth/logout`                      | Todos                | Revocar sesión y cookie.                                          |
+| `GET /v1/auth/me`                           | Todos                | Consultar identidad, rol y entidad vinculada.                     |
+| `GET /v1/catalog/products`                  | Comuna, ONG          | Consultar productos activos, unidades y múltiplos de entrega.     |
+| `POST /v1/requests`                         | Comuna               | Registrar solicitud confirmada de su comunidad.                   |
+| `GET /v1/requests`                          | Comuna               | Consultar solicitudes propias con paginación.                     |
+| `GET /v1/requests/{id}`                     | Comuna               | Consultar detalle, cobertura y recepciones vinculadas.            |
+| `GET /v1/ong/stocks`                        | ONG                  | Consultar existencias de almacenes propios.                       |
+| `POST /v1/ong/stocks/entries`               | ONG                  | Registrar ingresos y movimientos de inventario.                   |
+| `POST /v1/ong/stocks/adjustments`           | ONG                  | Registrar ajustes justificados respetando compromisos.            |
+| `GET /v1/ong/proposals`                     | ONG                  | Consultar propuestas propias, cantidades y prioridades.           |
+| `POST /v1/ong/proposals/{id}/confirm`       | ONG                  | Confirmar cantidades iguales o inferiores a las propuestas.       |
+| `POST /v1/ong/proposals/{id}/reject`        | ONG                  | Rechazar una propuesta con motivo obligatorio.                    |
+| `POST /v1/ong/proposals/{id}/authorize`     | ONG                  | Autorizar salida y comprometer existencias atómicamente.          |
+| `GET /v1/brigade/dispatches`                | Brigada              | Consultar despachos asignados y sus estados.                      |
+| `GET /v1/brigade/dispatches/{id}/route`     | Brigada              | Consultar ruta y vigencia de su verificación.                     |
+| `POST /v1/brigade/dispatches/{id}/withdraw` | Brigada              | Confirmar retiro completo y descuento idempotente.                |
+| `POST /v1/brigade/dispatches/{id}/arrive`   | Brigada              | Registrar llegada con fecha del servidor.                         |
+| `POST /v1/receipts`                         | Comuna               | Confirmar recepción única de un despacho propio.                  |
+| `GET /v1/receipts/{id}`                     | Comuna               | Consultar recepción conforme o con observaciones.                 |
+| `GET /v1/dispatches/{id}/documents`         | ONG, Comuna, Brigada | Consultar documentos según titularidad.                           |
+| `GET /v1/supervision/territory`             | Defensa Civil        | Consultar riesgos por comunidad y fenómeno.                       |
+| `GET /v1/supervision/coverage`              | Defensa Civil        | Consultar brechas y cantidades autorizadas, enviadas y conformes. |
+| `GET /v1/supervision/deliveries`            | Defensa Civil        | Consultar entregas por zona, producto y fecha.                    |
+| `GET /v1/supervision/final-reports`         | Defensa Civil        | Consultar informes finales publicados.                            |
+
+Los procesos automáticos de matching, ingesta y cierre se ejecutan mediante eventos autorizados del servidor, sin endpoints públicos para declarar emergencias.
+
+## 3. Contrato de creación de solicitudes
+
+**Endpoint:** `POST /v1/requests`
+
+**Ejemplo de petición:**
+
+```json
+{
+    "affectedPopulation": 80,
+    "situation": "Inundación con acceso limitado",
+    "items": [
+        {
+            "productId": "producto-uuid-1",
+            "quantity": "100"
+        },
+        {
+            "productId": "producto-uuid-2",
+            "quantity": "20"
+        }
+    ]
+}
+```
+
+La comunidad se identifica mediante la sesión y la emergencia corresponde al escenario activo configurado. Los identificadores del ejemplo son marcadores ficticios.
+
+**Respuesta esperada:** `201 Created`, con la solicitud, sus líneas y el estado `OPEN`.
+
+**Validación:** los productos duplicados y las cantidades no positivas generan `422 Unprocessable Content`.
+
+## 4. Contratos de operaciones críticas
+
+### 4.1. Confirmación de aportes
+
+**Endpoint:** `POST /v1/ong/proposals/{id}/confirm`
+
+El cuerpo contiene:
+
+`items: [{ matchingItemId, confirmedQuantity }]`
+
+Cada cantidad debe cumplir `0 <= confirmedQuantity <= proposedQuantity`.
+
+Si todas las cantidades son cero, corresponde un rechazo motivado. La operación conserva el responsable y la fecha de la decisión, sin autorizar todavía la salida.
+
+### 4.2. Autorización de salida
+
+**Endpoint:** `POST /v1/ong/proposals/{id}/authorize`
+
+Requiere una propuesta en estado `CONFIRMED` y la cabecera `Idempotency-Key`.
+
+El cuerpo del comando no admite modificar cantidades. El servidor revalida disponibilidad y cobertura antes de registrar atómicamente la autorización.
+
+### 4.3. Confirmación de retiro
+
+**Endpoint:** `POST /v1/brigade/dispatches/{id}/withdraw`
+
+El cuerpo incluye:
+
+`confirmFullWithdrawal: true`
+
+La operación requiere:
+
+- Ruta `AVAILABLE` con verificación vigente.
+- Coincidencia física con la totalidad de las cantidades autorizadas.
+- Cabecera `Idempotency-Key`.
+
+El retiro confirmado produce un único descuento de inventario. No se admiten retiros parciales.
+
+### 4.4. Confirmación de recepción
+
+**Endpoint:** `POST /v1/receipts`
+
+El cuerpo contiene:
+
+```json
+{
+    "dispatchId": "despacho-uuid",
+    "items": [
+        {
+            "dispatchItemId": "linea-uuid",
+            "receivedQuantity": "80",
+            "conformingQuantity": "75",
+            "observations": "5 unidades dañadas"
+        }
+    ],
+    "observations": "Recepción con observaciones"
+}
+```
+
+El servidor calcula `missingQuantity` respecto a la cantidad enviada y determina el resultado `CONFORMING` o `WITH_OBSERVATIONS`.
+
+La confirmación requiere `Idempotency-Key` y no permite registrar más de una recepción final por despacho.
+
+### 4.5. Consulta territorial
+
+**Endpoint:** `GET /v1/supervision/territory`
+
+La información de riesgo utiliza los campos:
+
+- `communityId`
+- `coordinates`
+- `catastrophe`
+- `riskLevel`
+- `source`
+- `assessedAt`
+
+Los datos de cobertura se presentan separadamente del riesgo territorial.
+
+## 5. Autorización y versionado
+
+### 5.1. Control de acceso
+
+El servidor valida rol y titularidad en cada operación.
+
+Las solicitudes sobre recursos ajenos devuelven `403 Forbidden`, incluso si el cliente modifica manualmente sus identificadores. La interfaz no determina los permisos efectivos.
+
+### 5.2. Evolución de contratos
+
+Los cambios compatibles pueden incorporar propiedades opcionales sin modificar el significado de las existentes.
+
+Renombrar propiedades, alterar su semántica o introducir cambios incompatibles requiere una nueva versión mayor o un mecanismo explícito de transición.
+
+Los contratos deben verificarse mediante ejemplos y validación automatizada. Las rutas de interfaz y los endpoints HTTP no forman parte de las reglas del dominio.

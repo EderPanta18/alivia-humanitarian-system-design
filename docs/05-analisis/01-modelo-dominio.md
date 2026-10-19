@@ -2,73 +2,101 @@
 
 ## 1. Propósito y alcance
 
-El modelo conceptual identifica entidades y relaciones de negocio sin fijar nombres de tablas, ORM, rutas HTTP o componentes visuales. Una entidad conceptual no implica un microservicio ni una tabla específica. Se modela la distribución de ayuda en una emergencia activa y la supervisión territorial del mismo territorio.
+El modelo conceptual define las principales entidades de Alivía, sus responsabilidades y relaciones dentro de la distribución de ayuda humanitaria y la supervisión territorial.
 
-## 2. Conceptos y sus límites
+Representa el dominio de negocio sin depender de tablas, ORM, rutas HTTP, componentes visuales ni decisiones sobre la distribución de servicios.
 
-| Concepto | Identidad y responsabilidad conceptual | No debe confundirse con |
-|---|---|---|
-| Usuario | Persona con rol y pertenencia operativa | Proceso automático |
-| Comunidad | Destino territorial único | Distrito o solicitud |
-| ONG | Organización que dispone de almacenes y decide aportes | Brigada logística |
-| Brigada | Unidad operativa que verifica retiros y registra llegadas | Vehículos y conductores individuales |
-| Emergencia | Contexto de atención previamente confirmado | Observación externa o tipo de desastre |
-| Solicitud | Necesidades declaradas por una comunidad en una emergencia | Una propuesta de ONG |
-| Línea solicitada | Producto y cantidad requerida | Producto físico/lote |
-| Lote de stock | Existencia de producto utilizable en almacén | Compromiso autorizado |
-| Propuesta | Oferta sugerida a una ONG para líneas solicitadas | Autorización |
-| Autorización | Compromiso válido de salida que inmoviliza disponibilidad | Retiro físico |
-| Despacho | Envío autorizado desde un almacén hasta una comunidad | Solicitud completa |
-| Recepción | Confirmación por comunidad de lo llegado físicamente | Llegada declarada por brigada |
-| Evaluación de riesgo | Observación histórica por comunidad, fenómeno y fuente | Nivel de ayuda recibida |
-| Informe final | Instantánea inmutable de cierre de emergencia | Reporte ad hoc en vivo |
+## 2. Conceptos del dominio
 
-## 3. Relaciones y cardinalidades conceptuales
+| Concepto             | Definición                                                                                                                     |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Usuario              | Persona con un rol y una entidad operativa asociada según sus permisos.                                                        |
+| Comunidad            | Entidad territorial destinataria de ayuda, distinta del distrito que la contiene.                                              |
+| ONG                  | Organización responsable de sus almacenes, inventarios y decisiones de aporte.                                                 |
+| Brigada              | Unidad operativa encargada de verificar retiros y registrar llegadas, sin representar individualmente vehículos o conductores. |
+| Emergencia           | Escenario de atención previamente configurado, independiente de las observaciones externas y los tipos de desastre.            |
+| Solicitud            | Registro de necesidades de una comunidad dentro de una emergencia.                                                             |
+| Línea de solicitud   | Producto del catálogo y cantidad requerida dentro de una solicitud.                                                            |
+| Lote de stock        | Existencias de un producto en un almacén, con su identificación y condición de utilización.                                    |
+| Propuesta            | Sugerencia de aporte dirigida a una ONG, sin compromiso de inventario.                                                         |
+| Autorización         | Compromiso de salida que excluye cantidades de nuevas asignaciones, sin representar un retiro físico.                          |
+| Despacho             | Envío autorizado desde un almacén hacia una comunidad.                                                                         |
+| Recepción            | Verificación comunitaria de las cantidades y condiciones de los productos entregados.                                          |
+| Evaluación de riesgo | Registro territorial asociado a una comunidad, tipo de desastre, fuente y fecha, independiente de la ayuda recibida.           |
+| Informe final        | Consolidado de resultados generado al finalizar el escenario, conservado como una instantánea inmutable.                       |
+
+## 3. Relaciones y cardinalidades
 
 ```mermaid
 classDiagram
- direction LR
- class Comunidad
- class Distrito
- class Solicitud
- class LineaSolicitud
- class ONG
- class Almacen
- class Lote
- class Propuesta
- class LineaPropuesta
- class Autorizacion
- class Despacho
- class LineaDespacho
- class Recepcion
- class EvaluacionRiesgo
- class Emergencia
- Distrito "1" --> "0..*" Comunidad : ubica
- Comunidad "1" --> "0..*" Solicitud : registra
- Emergencia "1" --> "0..*" Solicitud : contextualiza
- Solicitud "1" --> "1..*" LineaSolicitud : contiene
- ONG "1" --> "0..*" Almacen : administra
- Almacen "1" --> "0..*" Lote : custodia
- Solicitud "1" --> "0..*" Propuesta : recibe
- Propuesta "1" --> "1..*" LineaPropuesta : propone
- Propuesta "1" --> "0..1" Autorizacion : compromete
- Autorizacion "1" --> "1..*" Despacho : origina
- Despacho "1" --> "1..*" LineaDespacho : incluye
- Despacho "1" --> "0..1" Recepcion : confirma
- Comunidad "1" --> "0..*" EvaluacionRiesgo : tiene
+    direction LR
+
+    class Comunidad
+    class Distrito
+    class Solicitud
+    class LineaSolicitud
+    class ONG
+    class Almacen
+    class Lote
+    class Propuesta
+    class LineaPropuesta
+    class Autorizacion
+    class Despacho
+    class LineaDespacho
+    class Recepcion
+    class EvaluacionRiesgo
+    class Emergencia
+
+    Distrito "1" --> "0..*" Comunidad : ubica
+    Comunidad "1" --> "0..*" Solicitud : registra
+    Emergencia "1" --> "0..*" Solicitud : contextualiza
+    Solicitud "1" --> "1..*" LineaSolicitud : contiene
+
+    ONG "1" --> "0..*" Almacen : administra
+    Almacen "1" --> "0..*" Lote : custodia
+
+    Solicitud "1" --> "0..*" Propuesta : recibe
+    Propuesta "1" --> "1..*" LineaPropuesta : propone
+    Propuesta "1" --> "0..1" Autorizacion : compromete
+
+    Autorizacion "1" --> "1..*" Despacho : origina
+    Despacho "1" --> "1..*" LineaDespacho : incluye
+    Despacho "1" --> "0..1" Recepcion : confirma
+
+    Comunidad "1" --> "0..*" EvaluacionRiesgo : tiene
 ```
 
-La relación autorización-despachos es de uno a varios por almacenes; cada línea autorizada integra un único despacho. Una misma necesidad puede recibir propuestas y compromisos de varias ONG, pero un compromiso válido nunca se duplica.
+Una autorización puede originar varios despachos según los almacenes involucrados, pero cada línea autorizada pertenece a un único despacho.
 
-## 4. Invariantes fundamentales
+Una necesidad puede recibir propuestas de distintas ONG sin duplicar los compromisos válidos sobre una misma cantidad.
 
-1. Propuesta no cambia inventario; autorización compromete cantidades; retiro disminuye stock físico.
-2. Una entrega llegada no acredita recepción; solo la comunidad determina conforme y observaciones.
-3. Las discrepancias de una recepción concluida no reabren automáticamente las líneas enviadas.
-4. El riesgo territorial no disminuye por realizar despachos.
-5. El registro de desastre de una fuente externa no constituye declaración de emergencia.
-6. Cada usuario con rol de comuna, ONG o brigada administra una entidad exclusiva y cada entidad tiene un jefe único en esta versión.
+## 4. Invariantes del dominio
 
-## 5. Separación de conceptos de medición
+1. **Inventario:** las propuestas no comprometen existencias; las autorizaciones reducen la disponibilidad para asignar y los retiros confirmados descuentan el stock físico.
+2. **Recepción:** la llegada de un despacho no acredita conformidad. La comunidad verifica las cantidades y condiciones recibidas.
+3. **Cobertura:** las discrepancias de recepciones finalizadas no reactivan automáticamente el matching.
+4. **Riesgo territorial:** las entregas humanitarias no modifican automáticamente las evaluaciones de riesgo.
+5. **Emergencia:** las observaciones externas no constituyen declaraciones formales de emergencia.
+6. **Titularidad:** los jefes de comuna, ONG y brigada mantienen una vinculación exclusiva con su entidad, que dispone de un único responsable en esta versión.
 
-Una línea solicitada puede tener simultáneamente: `solicitada`, `comprometida_no_retirada`, `enviada`, `recibida_fisica`, `recibida_conforme` y `sin_cobertura`. Se calculan sobre líneas vinculadas sin sumar dos veces el mismo flujo de ayuda. La **brecha de satisfacción** considera toda parte todavía no recibida conforme; la **brecha elegible para matching** excluye las diferencias cerradas que requieren una nueva solicitud por decisión del responsable comunitario.
+## 5. Cantidades y cobertura
+
+Una línea de solicitud puede relacionarse con las siguientes cantidades:
+
+| Cantidad                   | Significado                                                               |
+| -------------------------- | ------------------------------------------------------------------------- |
+| `solicitada`               | Unidades requeridas por la comunidad.                                     |
+| `comprometida_no_retirada` | Unidades autorizadas pendientes de retiro físico.                         |
+| `enviada`                  | Unidades retiradas del almacén para su traslado.                          |
+| `recibida_fisica`          | Unidades que llegaron a la comunidad, independientemente de su condición. |
+| `recibida_conforme`        | Unidades recibidas que cumplen las condiciones esperadas.                 |
+| `sin_cobertura`            | Unidades elegibles que todavía no cuentan con cobertura válida.           |
+
+Estas cantidades se calculan a partir de las operaciones relacionadas, evitando contabilizar dos veces un mismo aporte.
+
+Se distinguen dos tipos de brecha:
+
+- **Brecha de satisfacción:** cantidad solicitada que todavía no se ha recibido conforme, incluidos los aportes autorizados o en tránsito.
+- **Brecha elegible para matching:** cantidad pendiente de cobertura que puede recibir nuevas propuestas, excluyendo compromisos vigentes y discrepancias de recepciones finalizadas.
+
+Las cantidades faltantes o no conformes de una recepción cerrada requieren una nueva solicitud comunitaria para volver a considerarse en el matching.

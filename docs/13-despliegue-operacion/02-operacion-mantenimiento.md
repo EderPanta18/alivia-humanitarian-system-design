@@ -1,37 +1,66 @@
 # Operación, monitoreo y mantenimiento
 
-## 1. Principios
+## 1. Principios operativos
 
-La operación conserva disponibilidad, integridad y trazabilidad. Los mecanismos de supervisión técnica no sustituyen la supervisión humanitaria de Defensa Civil. Toda alerta debe permitir identificar qué falló y evitar que el sistema muestre operaciones exitosas sin persistencia confirmada.
+La operación de Alivía debe preservar la disponibilidad, integridad y trazabilidad del sistema.
 
-## 2. Monitoreo mínimo
+El monitoreo técnico permite detectar fallos y degradaciones, pero no sustituye la supervisión humanitaria de Defensa Civil.
 
-| Señal | Motivo | Acción prevista |
-|---|---|---|
-| Errores HTTP 5xx y 409 | Falla interna o conflicto de consistencia | Diagnóstico por `requestId` y operación, sin filtrar secretos. |
-| p95 de latencia | Detectar degradación | Correlacionar carga, consultas e infraestructura. |
-| Errores de autenticación y 403 | Accesos fallidos o intentos indebidos | Revisar patrones, límites de intentos y permisos. |
-| Conexiones y espacio de PostgreSQL | Saturación o crecimiento | Revisar pool, índices y dimensionamiento. |
-| Fallos de ingesta externa | Observaciones antiguas | Marcar antigüedad y reintentar con backoff. |
-| Rutas vencidas | Riesgo de usar itinerario obsoleto | Impedir retiro hasta reevaluar. |
-| Tareas de documentos e informe | Archivos faltantes/duplicados | Reintentar de forma idempotente sin duplicar recepción. |
-| Antigüedad de respaldos | Riesgo de pérdida de datos | Generar respaldo y probar restauración. |
+Las alertas deben facilitar el diagnóstico y evitar que una operación sin persistencia confirmada se presente como exitosa.
 
-## 3. Procedimientos periódicos
+## 2. Monitoreo técnico
 
-- **Diario:** comprobar errores críticos, salud API/BD, ejecución de respaldos y colas de tareas fallidas.
-- **Semanal:** revisar eventos de permisos, versiones de dependencias, estado de integraciones y reconciliación de saldos.
-- **Mensual:** probar restauración aislada, revisar índices/performance y auditar cuentas activas.
-- **Ante cambio de proveedor:** validar contrato, licencia, periodo de actualización, geografía y fallos antes de habilitarlo.
+| Señal                                           | Riesgo identificado                                        | Acción prevista                                                      |
+| ----------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------- |
+| Errores HTTP `5xx` y conflictos `409`           | Fallos internos o conflictos operativos y de concurrencia. | Diagnosticar mediante `requestId` y operación, sin exponer secretos. |
+| Latencia p95                                    | Degradación del rendimiento.                               | Correlacionar carga, consultas y recursos de infraestructura.        |
+| Errores de autenticación y respuestas `403`     | Accesos fallidos o intentos no autorizados.                | Revisar patrones, límites de intentos y permisos.                    |
+| Conexiones y almacenamiento PostgreSQL          | Saturación o crecimiento de recursos.                      | Evaluar pool, índices y capacidad.                                   |
+| Fallos de ingesta externa                       | Observaciones desactualizadas.                             | Mostrar antigüedad y aplicar reintentos con _backoff_.               |
+| Rutas vencidas                                  | Uso potencial de recorridos obsoletos.                     | Bloquear el retiro hasta obtener una nueva verificación.             |
+| Fallos de generación documental e informe final | Archivos faltantes o resultados duplicados.                | Reintentar idempotentemente sin duplicar recepciones ni informes.    |
+| Antigüedad de respaldos                         | Pérdida potencial de información.                          | Verificar la ejecución de respaldos y ensayar su restauración.       |
+
+## 3. Mantenimiento periódico
+
+| Frecuencia              | Actividades                                                                                                                                |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Diaria**              | Revisar errores críticos, salud de API y PostgreSQL, respaldos y tareas fallidas.                                                          |
+| **Semanal**             | Examinar eventos de autorización, versiones de dependencias, integraciones externas y conciliación de saldos.                              |
+| **Mensual**             | Ensayar restauraciones aisladas, revisar índices y rendimiento, y auditar cuentas activas.                                                 |
+| **Cambio de proveedor** | Verificar contrato, licencia, frecuencia de actualización, cobertura geográfica y tratamiento de fallos antes de habilitar la integración. |
+
+Las revisiones deben conservar evidencias de los problemas detectados y las acciones correctivas aplicadas.
 
 ## 4. Gestión de incidentes
 
-Clasificar severidad por impacto. P0: corrupción/sobreasignación de stock, confirmaciones falsas, acceso entre entidades, pérdida de trazabilidad. P1: imposibilidad de solicitar o recepcionar, rutas inhabilitadas. P2: errores secundarios de visualización sin afectar operación. En P0 se detiene el comando afectado y se preserva evidencia; nunca se repara silenciosamente el historial de inventario.
+Los incidentes se clasifican según su impacto sobre la integridad, seguridad y continuidad operativa.
 
-## 5. Evolución funcional
+| Severidad           | Condiciones                                                                                                          |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| **P0 — Crítica**    | Corrupción o sobreasignación de inventario, confirmaciones falsas, acceso entre entidades o pérdida de trazabilidad. |
+| **P1 — Alta**       | Imposibilidad de registrar solicitudes o recepciones y fallos de rutas que impidan operaciones logísticas.           |
+| **P2 — Secundaria** | Errores de presentación que no comprometen las operaciones ni la integridad de los datos.                            |
 
-Nuevos roles, emergencias concurrentes, GPS, gestión vehicular o automatización institucional requieren nueva definición de alcance y contratos; no se incorporan como efecto secundario de mantener infraestructura. Los cambios de interfaz o URL preservan los identificadores conceptuales de vista y sus criterios de aceptación.
+Ante un incidente P0 se debe detener la operación afectada, preservar las evidencias y evaluar la recuperación antes de restablecerla.
 
-## 6. Seguridad y ética operativa
+Las correcciones no deben borrar ni modificar silenciosamente movimientos de inventario o eventos históricos de auditoría.
 
-Minimizar datos personales, explicar incertidumbre de observaciones territoriales, no presentar rutas como certificación de seguridad, no automatizar decisiones institucionales a partir de una alerta y no afirmar disponibilidad sin mediciones y acuerdos. La plataforma debe permitir auditar quién realizó cada compromiso o verificación comunitaria.
+## 5. Evolución y control de cambios
+
+Las capacidades ajenas al alcance inicial, como nuevos roles, emergencias concurrentes, seguimiento GPS, gestión vehicular o automatización institucional, requieren una revisión explícita de requisitos y contratos.
+
+El mantenimiento técnico no autoriza incorporar estas funciones de manera implícita.
+
+Los cambios de interfaz, rutas o tecnologías deben conservar los identificadores conceptuales de las vistas y sus criterios de aceptación, salvo que exista una decisión documentada que los modifique.
+
+## 6. Seguridad y responsabilidad operativa
+
+La operación debe respetar las siguientes condiciones:
+
+- Minimizar la recopilación y exposición de datos personales.
+- Comunicar la fuente, vigencia e incertidumbre de las observaciones territoriales.
+- No presentar rutas calculadas como garantías de transitabilidad o seguridad física.
+- No automatizar decisiones institucionales a partir de alertas externas.
+- No afirmar niveles de disponibilidad sin mediciones y acuerdos verificables.
+- Mantener trazabilidad de los responsables de compromisos de inventario y verificaciones comunitarias.

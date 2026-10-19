@@ -1,72 +1,99 @@
 # Ciclos de vida y transiciones
 
-## 1. Principio
+## 1. Principios generales
 
-Un estado expresa un hecho confirmado por la operación correspondiente. El servidor controla cambios mediante precondiciones, versión actual, titularidad e idempotencia. El navegador no modifica estados arbitrariamente. Los estados de alto nivel pueden ser derivados de las líneas de detalle; nunca sustituyen las cantidades verificadas.
+Los estados representan hechos confirmados del proceso operativo. El servidor controla cada transición mediante la validación de precondiciones, titularidad, estado vigente e idempotencia.
 
-## 2. Solicitud
+Los estados generales pueden derivarse de las operaciones y sus líneas de detalle, pero no sustituyen las cantidades registradas ni permiten modificaciones arbitrarias desde la interfaz.
 
-```mermaid
-stateDiagram-v2
- [*] --> OPEN : confirmada
- OPEN --> IN_PROGRESS : primera autorización vigente
- IN_PROGRESS --> CLOSED : operaciones relacionadas concluidas
- OPEN --> CLOSED : cierre administrativo del escenario sin cobertura
- CLOSED --> [*]
-```
-
-`OPEN` identifica demanda registrada; `IN_PROGRESS`, atención comprometida o en curso; `CLOSED`, fin del ciclo de atención de esa solicitud en el escenario. `CLOSED` no certifica satisfacción total. La solicitud confirmada no se edita ni cancela desde la interfaz del jefe de Comuna.
-
-## 3. Matching y autorización
+## 2. Ciclo de vida de la solicitud
 
 ```mermaid
 stateDiagram-v2
- [*] --> PROPOSED
- PROPOSED --> CONFIRMED : ONG confirma cantidades
- PROPOSED --> REJECTED : ONG rechaza
- CONFIRMED --> AUTHORIZED : ONG autoriza tras revalidar
- AUTHORIZED --> [*]
- REJECTED --> [*]
+    [*] --> OPEN : Solicitud confirmada
+    OPEN --> IN_PROGRESS : Primera autorización vigente
+    IN_PROGRESS --> CLOSED : Operaciones relacionadas concluidas
+    OPEN --> CLOSED : Cierre del escenario sin cobertura
+    CLOSED --> [*]
 ```
 
-Una propuesta confirmada no compromete existencias hasta el acto `AUTHORIZED`. Si una propuesta pierde validez antes de autorizar, el comando de autorización falla y se recalcula una propuesta nueva. No se reescribe la anterior silenciosamente.
+| Estado        | Significado                                                                                  |
+| ------------- | -------------------------------------------------------------------------------------------- |
+| `OPEN`        | Solicitud confirmada con necesidades registradas.                                            |
+| `IN_PROGRESS` | Solicitud con ayuda comprometida o en proceso de atención.                                   |
+| `CLOSED`      | Ciclo de atención concluido dentro del escenario, aunque existan necesidades no satisfechas. |
 
-## 4. Despacho, ruta y recepción
+Las solicitudes confirmadas no pueden editarse ni cancelarse por el jefe de Comuna. El estado `CLOSED` conserva las cantidades históricas y no implica satisfacción completa.
+
+## 3. Ciclo de vida de propuestas y autorizaciones
 
 ```mermaid
 stateDiagram-v2
- [*] --> AUTHORIZED
- AUTHORIZED --> WITHDRAWN : ruta valida + retiro completo
- WITHDRAWN --> ARRIVED : brigada registra llegada
- ARRIVED --> FINALIZED : comunidad confirma recepcion
- FINALIZED --> [*]
+    [*] --> PROPOSED
+    PROPOSED --> CONFIRMED : ONG confirma cantidades
+    PROPOSED --> REJECTED : ONG rechaza
+    CONFIRMED --> AUTHORIZED : ONG autoriza tras revalidación
+    AUTHORIZED --> [*]
+    REJECTED --> [*]
 ```
 
-- La ruta tiene `AVAILABLE`, `UNAVAILABLE` u `OUTDATED` y se verifica **antes** de retirar.
-- El retiro solo es completo y debe coincidir con todo lo autorizado por ese despacho.
-- La llegada registra fecha, no conformidad.
-- La recepción produce `CONFORMING` o `WITH_OBSERVATIONS`; la segunda genera discrepancia interna.
-- La finalización desencadena manifiesto Excel y acta PDF, generados idempotentemente por despacho y tipo.
+| Estado       | Significado                                                     |
+| ------------ | --------------------------------------------------------------- |
+| `PROPOSED`   | Aporte sugerido, sin compromiso de inventario.                  |
+| `CONFIRMED`  | Cantidades aceptadas por la ONG, pendientes de autorización.    |
+| `REJECTED`   | Propuesta rechazada por la ONG.                                 |
+| `AUTHORIZED` | Aporte autorizado, con cantidades comprometidas para su salida. |
 
-## 5. Riesgo territorial y cierre de emergencia
+Si una propuesta pierde validez antes de autorizarse, la operación se rechaza y debe recalcularse una nueva propuesta. La anterior no se modifica silenciosamente.
+
+## 4. Ciclo de vida del despacho y la recepción
 
 ```mermaid
 stateDiagram-v2
- [*] --> ACTIVE : escenario previamente habilitado
- ACTIVE --> FINISHED : EMERGENCIA_FINALIZADA preconfigurado
- FINISHED --> REPORT_AVAILABLE : captura unica de informe
- REPORT_AVAILABLE --> [*]
+    [*] --> AUTHORIZED
+    AUTHORIZED --> WITHDRAWN : Ruta válida y retiro completo
+    WITHDRAWN --> ARRIVED : Brigada registra llegada
+    ARRIVED --> FINALIZED : Comunidad confirma recepción
+    FINALIZED --> [*]
 ```
 
-Las importaciones de datos territoriales son observaciones fechadas y no producen esta transición. La repetición del mismo evento de cierre debe devolver el informe publicado sin crear otro. En el diseño, `finished_at` e identificador de evento fijan el corte temporal del contenido.
+Las transiciones cumplen las siguientes condiciones:
 
-## 6. Errores y carreras concurrentes
+- **Ruta:** debe verificarse antes del retiro y puede encontrarse en estado `AVAILABLE`, `UNAVAILABLE` u `OUTDATED`.
+- **Retiro:** únicamente se confirma cuando las cantidades físicas coinciden con la totalidad autorizada.
+- **Llegada:** acredita el arribo del despacho, sin confirmar la conformidad de los productos.
+- **Recepción:** finaliza como `CONFORMING` o `WITH_OBSERVATIONS`. Este último resultado conserva las discrepancias en un reporte interno.
+- **Documentos:** al finalizar la recepción se genera un manifiesto Excel y un acta PDF, sin duplicados por despacho y tipo documental.
 
-| Comando | Condición de rechazo | Efecto sobre estado |
-|---|---|---|
-| Confirmar cantidades | Propuesta no vigente, ONG incorrecta, cantidades superiores | Sin cambio; mostrar conflicto. |
-| Autorizar | Falta stock, cobertura ya comprometida, propuesta no confirmada | Sin cambio; puede generarse nueva propuesta. |
-| Retirar | Ruta desactualizada, desconocida o intransitable; cantidades no completas | Sin retiro ni movimiento. |
-| Registrar llegada | Despacho todavía no retirado o ajeno a brigada | Sin cambio. |
-| Recibir | Despacho no llegado, recepción ya finalizada o cantidades inválidas | Sin duplicación; devolver estado vigente. |
-| Finalizar emergencia | Evento sin identidad configurada | No publica informe. |
+## 5. Ciclo de vida del escenario de emergencia
+
+```mermaid
+stateDiagram-v2
+    [*] --> ACTIVE : Escenario habilitado
+    ACTIVE --> FINISHED : EMERGENCIA_FINALIZADA
+    FINISHED --> REPORT_AVAILABLE : Informe final generado
+    REPORT_AVAILABLE --> [*]
+```
+
+| Estado             | Significado                                              |
+| ------------------ | -------------------------------------------------------- |
+| `ACTIVE`           | Escenario configurado y habilitado para operaciones.     |
+| `FINISHED`         | Finalización activada por el evento preconfigurado.      |
+| `REPORT_AVAILABLE` | Informe consolidado generado y disponible para consulta. |
+
+Las observaciones territoriales externas no producen transiciones de emergencia.
+
+El informe final se genera una sola vez por evento. Su identificador y `finished_at` determinan el corte temporal; procesar nuevamente el mismo evento no duplica ni modifica silenciosamente el informe publicado.
+
+## 6. Validación de transiciones y concurrencia
+
+| Operación            | Condición de rechazo                                                      | Resultado                                                           |
+| -------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Confirmar propuesta  | Propuesta no vigente, ONG ajena o cantidades superiores a las propuestas. | Sin cambio de estado; informar conflicto.                           |
+| Autorizar salida     | Stock insuficiente, cobertura ya comprometida o propuesta no confirmada.  | Sin autorización ni compromiso; puede requerir una nueva propuesta. |
+| Confirmar retiro     | Ruta vencida, desconocida o intransitable; cantidades incompletas.        | Sin retiro ni descuento de inventario.                              |
+| Registrar llegada    | Despacho no retirado o ajeno a la brigada.                                | Sin cambio de estado.                                               |
+| Confirmar recepción  | Despacho sin llegada, recepción finalizada o cantidades inválidas.        | Sin duplicación; conservar y devolver el estado vigente.            |
+| Finalizar emergencia | Evento sin identidad configurada.                                         | No generar ni publicar informe final.                               |
+
+Las operaciones críticas deben ejecutarse de forma consistente e idempotente para evitar transiciones y efectos duplicados ante solicitudes concurrentes o reintentos.
