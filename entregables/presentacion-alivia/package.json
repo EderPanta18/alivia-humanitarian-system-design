@@ -1,0 +1,6 @@
+{
+  "name": "alivia-presentacion-academica",
+  "private": true,
+  "scripts": { "generar": "node generar-presentacion.js" },
+  "dependencies": { "pptxgenjs": "4.0.1", "sharp": "0.35.5" }
+}
