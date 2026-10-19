@@ -1,0 +1,92 @@
+
+@startuml
+title UC-06 | Inventario y propuestas de matching — Alivía
+
+left to right direction
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam packageStyle rectangle
+skinparam nodesep 45
+skinparam ranksep 55
+skinparam roundCorner 8
+
+' ==========================================
+' ACTORES
+' ==========================================
+
+actor "Jefe de\nComuna" as COM
+actor "Jefe de\nONG" as ONG
+
+' ==========================================
+' CASOS DE USO
+' ==========================================
+
+rectangle "Alivía — Inventario y matching" {
+
+  package "Origen de necesidades" {
+
+    usecase "CU-COM-01\nRegistrar solicitud\nde ayuda" as COM01
+
+  }
+
+  package "Inventario de ONG" {
+
+    usecase "CU-ONG-01\nRegistrar ingreso\nde donaciones" as ONG01
+
+    usecase "CU-ONG-02\nConsultar inventario\ndisponible" as ONG02
+
+    usecase "CU-ONG-03\nRegistrar ajuste\nde inventario" as ONG03
+
+  }
+
+  package "Propuestas de matching" {
+
+    usecase "CU-ONG-04\nRevisar propuesta\nde matching" as ONG04
+
+  }
+
+}
+
+' ==========================================
+' ASOCIACIONES
+' ==========================================
+
+COM -- COM01
+
+ONG -- ONG01
+ONG -- ONG02
+ONG -- ONG03
+ONG -- ONG04
+
+' ==========================================
+' REGLAS PRINCIPALES
+' ==========================================
+
+legend bottom
+  Reglas funcionales:
+
+  - La Comuna registra necesidades mediante
+    solicitudes confirmadas de su comunidad.
+  - La ONG administra exclusivamente
+    sus almacenes y existencias.
+  - Los ingresos y ajustes de inventario
+    son validados y trazables.
+  - La disponibilidad excluye compromisos
+    vigentes y lotes no utilizables.
+  - El matching se ejecuta automáticamente
+    ante solicitudes confirmadas y cambios
+    relevantes en el inventario o propuestas.
+  - El motor considera necesidades pendientes
+    y disponibilidad elegible para proponer
+    aportes a las ONG.
+  - Las propuestas no reservan, comprometen
+    ni descuentan inventario.
+  - Revisar una propuesta no equivale
+    a confirmarla ni autorizar su salida.
+endlegend
+
+@enduml

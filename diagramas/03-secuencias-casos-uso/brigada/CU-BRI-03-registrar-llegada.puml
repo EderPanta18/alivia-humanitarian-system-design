@@ -1,0 +1,148 @@
+
+@startuml
+title CU-BRI-03 | Registrar llegada al destino — Alivía
+
+hide footbox
+autonumber
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 160
+skinparam BoxPadding 12
+
+' ==========================================
+' PARTICIPANTES
+' ==========================================
+
+actor "Jefe de\nBrigada" as U
+boundary "Frontend\nNext.js" as WEB
+control "API\nNestJS" as API
+control "Identity" as ID
+control "Logistics" as LO
+database "PostgreSQL" as DB
+
+' ==========================================
+' PRECONDICIÓN
+' ==========================================
+
+note over U, WEB
+  El despacho debe pertenecer
+  a la brigada y tener el retiro
+  completo previamente confirmado.
+
+  Registrar llegada no equivale
+  a confirmar recepción comunitaria.
+end note
+
+' ==========================================
+' SOLICITUD
+' ==========================================
+
+U -> WEB : Confirmar llegada al destino
+WEB -> API : POST /v1/brigade/dispatches/{id}/arrive
+
+API -> ID : Validar sesión, rol y brigada vinculada
+
+' ==========================================
+' CONTROL DE ACCESO
+' ==========================================
+
+alt Sesión ausente, inválida o expirada
+
+  ID --> API : Autenticación inválida
+  API --> WEB : HTTP 401
+  WEB --> U : Solicitar autenticación
+
+else Rol ajeno o brigada no vinculada
+
+  ID --> API : Acceso denegado
+  API --> WEB : HTTP 403
+  WEB --> U : Mostrar acceso denegado
+
+else Identidad autorizada
+
+  ID --> API : Contexto autorizado (usuario, brigadeId)
+
+  API -> LO : Registrar llegada\n(dispatchId, brigadeId, usuario)
+
+  LO -> DB : Consultar despacho y asignación
+  DB --> LO : Despacho y estado actual
+
+  ' ========================================
+  ' TITULARIDAD
+  ' ========================================
+
+  alt Despacho inexistente o ajeno
+
+    LO --> API : Recurso no accesible
+    API --> WEB : Acceso denegado o no encontrado
+    WEB --> U : No permitir registrar llegada
+
+  else Despacho propio
+
+    LO -> DB : Validar transición y registrar\nARRIVED, responsable y hora del servidor
+
+    note over LO, DB
+      Operación atómica.
+      Solo WITHDRAWN permite
+      una nueva transición a ARRIVED.
+    end note
+
+    DB --> LO : Resultado y estado persistido
+
+    ' ======================================
+    ' RESULTADO
+    ' ======================================
+
+    alt Primera llegada válida
+
+      LO --> API : ARRIVED confirmado
+      API --> WEB : HTTP 200 + llegada registrada
+      WEB --> U : Mostrar llegada y fecha/hora
+
+    else Llegada previamente registrada
+
+      LO --> API : Estado existente sin nuevo registro
+      API --> WEB : Estado actual del despacho
+      WEB --> U : Mostrar llegada ya registrada
+
+    else Retiro no confirmado o transición inválida
+
+      LO --> API : Conflicto de estado
+      API --> WEB : HTTP 409
+      WEB --> U : Informar que no procede la llegada
+
+    else Error al persistir
+
+      LO --> API : Operación no confirmada
+      API --> WEB : Error de operación
+      WEB --> U : No confirmar éxito
+
+    end
+
+  end
+
+end
+
+' ==========================================
+' POSCONDICIÓN
+' ==========================================
+
+note over U, WEB
+  Una llegada válida registra
+  responsable y fecha/hora del servidor.
+
+  No modifica cantidades ni inventario.
+
+  Habilita la recepción por Comuna,
+  sin acreditar recepción conforme.
+
+  Los reintentos no duplican llegadas
+  ni revierten estados posteriores.
+end note
+
+@enduml

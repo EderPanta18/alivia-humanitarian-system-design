@@ -1,0 +1,152 @@
+
+@startuml
+title CU-BRI-02 | Consultar ruta de despacho — Alivía
+
+hide footbox
+autonumber
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 160
+skinparam BoxPadding 12
+
+' ==========================================
+' PARTICIPANTES
+' ==========================================
+
+actor "Jefe de\nBrigada" as U
+boundary "Frontend\nNext.js" as WEB
+control "API\nNestJS" as API
+control "Identity" as ID
+control "Logistics" as LO
+database "PostgreSQL" as DB
+control "Servicio de\nrutas" as RT
+
+' ==========================================
+' PRECONDICIÓN
+' ==========================================
+
+note over U, WEB
+  El despacho debe estar autorizado
+  y asignado a la brigada.
+
+  La consulta no confirma el retiro
+  ni garantiza transitabilidad física.
+end note
+
+' ==========================================
+' CONSULTA DE RUTA
+' ==========================================
+
+U -> WEB : Consultar ruta del despacho
+WEB -> API : GET /v1/brigade/dispatches/{id}/route
+
+API -> ID : Validar sesión, rol y brigada vinculada
+
+alt Sesión ausente, inválida o expirada
+
+  ID --> API : Autenticación inválida
+  API --> WEB : HTTP 401
+  WEB --> U : Solicitar autenticación
+
+else Rol ajeno o brigada no vinculada
+
+  ID --> API : Acceso denegado
+  API --> WEB : HTTP 403
+  WEB --> U : Mostrar acceso denegado
+
+else Identidad autorizada
+
+  ID --> API : Contexto autorizado (brigadeId)
+
+  API -> LO : Consultar ruta del despacho\n(dispatchId, brigadeId)
+
+  LO -> DB : Leer despacho, asignación,\nruta y restricciones viales
+  DB --> LO : Datos del despacho y ruta existente
+
+  alt Despacho ajeno, inexistente o no autorizado
+
+    LO --> API : Recurso no accesible
+    API --> WEB : Acceso denegado o no encontrado
+    WEB --> U : No mostrar información del despacho
+
+  else Despacho propio y autorizado
+
+    alt Ruta AVAILABLE y verificación vigente
+
+      note over LO, DB
+        Vigencia menor a 30 minutos.
+        Sin tramos UNKNOWN o IMPASSABLE.
+      end note
+
+      LO --> API : Ruta verificada y disponible
+      API --> WEB : HTTP 200 + ruta AVAILABLE
+      WEB --> U : Mostrar recorrido, estado,\nfuente y fecha de verificación
+
+    else Ruta ausente, vencida o no disponible
+
+      LO -> RT : Evaluar recorrido con origen,\ndestino y restricciones conocidas
+
+      note over LO, RT
+        Excluir tramos IMPASSABLE
+        y UNKNOWN del recorrido elegible.
+      end note
+
+      alt Existe un recorrido evaluable
+
+        RT --> LO : Geometría, tramos y estimación
+
+        LO -> DB : Registrar ruta AVAILABLE,\nrecorrido y fecha de verificación
+        DB --> LO : Registro confirmado
+
+        LO --> API : Ruta disponible y verificada
+        API --> WEB : HTTP 200 + ruta AVAILABLE
+        WEB --> U : Mostrar recorrido y vigencia
+
+      else No existe recorrido verificable
+
+        RT --> LO : Sin ruta elegible
+
+        LO -> DB : Registrar estado UNAVAILABLE
+        DB --> LO : Estado confirmado
+
+        LO --> API : Ruta UNAVAILABLE
+        API --> WEB : HTTP 200 + estado UNAVAILABLE
+        WEB --> U : Mostrar indisponibilidad de ruta
+
+      else Fallo técnico del servicio de rutas
+
+        RT --> LO : Error o resultado no verificable
+        LO --> API : Evaluación no completada
+        API --> WEB : Error de consulta de ruta
+        WEB --> U : Informar que no existe\nverificación disponible
+
+      end
+
+    end
+
+  end
+
+end
+
+' ==========================================
+' POSCONDICIÓN
+' ==========================================
+
+note over U, WEB
+  La consulta no modifica el despacho
+  ni descuenta inventario.
+
+  Solo una ruta AVAILABLE vigente
+  puede habilitar posteriormente
+  la confirmación del retiro completo.
+
+  La validez se vuelve a comprobar
+  en CU-BRI-04.
+end note
+
+@enduml

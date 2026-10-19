@@ -1,0 +1,236 @@
+
+@startuml
+title AUT-02 | Ingesta de observaciones y alertas externas — Alivía
+
+hide footbox
+autonumber
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 160
+skinparam BoxPadding 12
+
+' ==========================================
+' PARTICIPANTES
+' ==========================================
+
+participant "Planificador\ninterno" as CLK
+control "Adaptador de\nfuentes externas" as PR
+participant "Fuente externa\nconfigurada" as SRC
+control "Territory" as TE
+database "PostgreSQL" as DB
+
+' ==========================================
+' PRECONDICIÓN
+' ==========================================
+
+note over CLK, PR
+  La fuente externa está configurada
+  y su consulta se encuentra habilitada.
+
+  Deben respetarse permisos,
+  licencias y límites de frecuencia.
+
+  El escenario de emergencia
+  está preconfigurado.
+
+  La ingesta no declara emergencias.
+end note
+
+' ==========================================
+' INICIO DE LA INGESTA
+' ==========================================
+
+CLK -> PR : Iniciar consulta programada
+
+PR -> PR : Verificar configuración,\npermisos y límites del proveedor
+
+alt Proveedor no habilitado o sin permisos
+
+  PR --> CLK : Consulta omitida por configuración
+
+else Consulta permitida
+
+  PR -> SRC : Solicitar observaciones y alertas\nsegún contrato del proveedor
+
+  alt Fuente inaccesible o respuesta fallida
+
+    SRC --> PR : Error o acceso no disponible
+
+    PR -> PR : Registrar diagnóstico técnico\npor mecanismo de observabilidad
+
+    PR --> CLK : Ingesta fallida o pendiente de reintento
+
+  else Fuente accesible
+
+    SRC --> PR : Datos disponibles y metadatos
+
+    alt Sin observaciones nuevas
+
+      PR --> CLK : Consulta completada sin novedades
+
+    else Existen datos para procesar
+
+      ' ====================================
+      ' NORMALIZACIÓN
+      ' ====================================
+
+      loop Por cada registro recibido
+
+        PR -> PR : Normalizar identificador,\nfenómeno, fuente y fechas
+
+        PR -> PR : Examinar ubicación y\ncondición de verificación
+
+        note over PR
+          Conservar cuando existan:
+
+          - Proveedor e identificador externo.
+          - Fenómeno u observación.
+          - Fecha del dato original.
+          - Fecha de incorporación.
+          - Ubicación respaldada.
+          - Condición de verificación.
+
+          No inventar coordenadas,
+          fechas ni niveles de certeza.
+        end note
+
+        alt Fuente no confiable o registro inválido
+
+          PR -> PR : Descartar de la ingesta válida\ny registrar motivo técnico
+
+          note over PR
+            Un registro inválido no
+            actualiza evaluaciones
+            territoriales ni se presenta
+            como dato confirmado.
+          end note
+
+        else Registro admisible
+
+          ' ================================
+          ' VALIDACIÓN DEL DOMINIO
+          ' ================================
+
+          PR -> TE : Incorporar observación normalizada
+
+          TE -> TE : Validar procedencia,\nfechas y datos informativos
+
+          TE -> TE : Conservar condición real\nde verificación
+
+          ' ================================
+          ' IDEMPOTENCIA
+          ' ================================
+
+          TE -> DB : Buscar observación previa\npor identidad de origen
+
+          DB --> TE : Coincidencia o sin registro
+
+          alt Observación ya incorporada
+
+            TE --> PR : Registro previamente conocido
+
+          else Observación nueva
+
+            ' ==============================
+            ' PERSISTENCIA
+            ' ==============================
+
+            note over TE, DB
+              La persistencia de
+              observaciones es requerida.
+
+              Su esquema y reglas exactas
+              de deduplicación todavía
+              deben definirse en Territory.
+            end note
+
+            TE -> DB : Guardar observación, fuente,\nfechas y verificación conocida
+
+            alt Error de persistencia
+
+              DB --> TE : Registro no confirmado
+
+              TE --> PR : Error recuperable
+
+              PR -> PR : Conservar fallo para reintento\nsin anunciar incorporación
+
+            else Observación persistida
+
+              DB --> TE : Registro confirmado
+
+              ' ============================
+              ' EVALUACIÓN TERRITORIAL
+              ' ============================
+
+              opt Existe evaluación de riesgo autorizada y validada
+
+                TE -> TE : Comprobar comunidad,\ncatástrofe, nivel y fuente
+
+                TE -> DB : Conservar evaluación histórica\nen territory.risk
+
+                note over TE, DB
+                  Registrar una evaluación
+                  respaldada por una fuente
+                  y una política definida.
+
+                  No deducir severidad
+                  directamente de una alerta.
+
+                  Importar un dato antiguo
+                  no lo vuelve el más reciente.
+                end note
+
+              end
+
+              TE --> PR : Observación incorporada\ncomo información territorial
+
+            end
+
+          end
+
+        end
+
+      end
+
+      ' ====================================
+      ' RESULTADO DEL LOTE
+      ' ====================================
+
+      PR --> CLK : Informar registros incorporados,\nrepetidos y rechazados
+
+    end
+
+  end
+
+end
+
+' ==========================================
+' POSCONDICIÓN
+' ==========================================
+
+note over TE, DB
+  Las observaciones conservan
+  su origen, fecha y condición
+  de verificación conocida.
+
+  La información no verificada
+  nunca se presenta como confirmada.
+
+  Una observación externa no:
+  - Declara una emergencia.
+  - Modifica automáticamente el riesgo.
+  - Autoriza despachos.
+  - Inicia matching.
+  - Cierra el escenario.
+
+  Los avisos informativos a usuarios
+  autorizados requieren un mecanismo
+  de difusión definido por separado.
+end note
+
+@enduml

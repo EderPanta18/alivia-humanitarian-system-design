@@ -1,0 +1,81 @@
+
+@startuml
+title UC-10 | Supervisión y consulta final — Alivía
+
+left to right direction
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam packageStyle rectangle
+skinparam nodesep 45
+skinparam ranksep 55
+skinparam roundCorner 8
+
+' ==========================================
+' ACTOR
+' ==========================================
+
+actor "Jefe de\nDefensa Civil" as DC
+
+' ==========================================
+' CASOS DE USO
+' ==========================================
+
+rectangle "Alivía — Supervisión territorial" {
+
+  usecase "CU-DC-01\nConsultar riesgo territorial\ny alertas recientes" as DC01
+
+  usecase "CU-DC-02\nConsultar avance de\natención y brechas" as DC02
+
+  usecase "CU-DC-03\nConsultar informe\nfinal publicado" as DC03
+
+}
+
+' ==========================================
+' ASOCIACIONES
+' ==========================================
+
+DC -- DC01
+DC -- DC02
+DC -- DC03
+
+' ==========================================
+' REGLAS PRINCIPALES
+' ==========================================
+
+legend bottom
+  Reglas funcionales:
+
+  - Defensa Civil realiza consultas
+    territoriales de solo lectura.
+  - La consulta de riesgo presenta
+    tipo de desastre, severidad,
+    ubicación, fuente y fecha.
+  - Las observaciones y alertas
+    recientes conservan su condición
+    de verificación y procedencia.
+  - Los datos ausentes, antiguos
+    o no verificados no se presentan
+    como información confirmada.
+  - Las alertas externas son informativas:
+    no declaran ni activan emergencias.
+  - La supervisión de atención distingue
+    cantidades autorizadas, en traslado
+    y recibidas conformes.
+  - Las brechas y discrepancias
+    permanecen visibles según los datos.
+  - Registrar llegada no equivale
+    a confirmar una recepción conforme.
+  - Las consultas no modifican solicitudes,
+    compromisos, inventario ni despachos.
+  - El informe final solo está disponible
+    después de procesar el evento
+    EMERGENCIA_FINALIZADA.
+  - El informe publicado es único,
+    inmutable y de solo lectura.
+endlegend
+
+@enduml

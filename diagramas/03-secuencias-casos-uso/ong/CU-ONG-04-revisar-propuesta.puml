@@ -1,0 +1,204 @@
+
+@startuml
+title CU-ONG-04 | Revisar propuesta de matching — Alivía
+
+hide footbox
+autonumber
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 160
+skinparam BoxPadding 12
+
+' ==========================================
+' PARTICIPANTES
+' ==========================================
+
+actor "Jefe de\nONG" as U
+boundary "Frontend\nNext.js" as WEB
+control "API\nNestJS" as API
+control "Identity" as ID
+control "Inventory" as IN
+control "Shelter" as SH
+database "PostgreSQL" as DB
+
+' ==========================================
+' PRECONDICIÓN
+' ==========================================
+
+note over U, WEB
+  El usuario tiene una sesión válida
+  y está vinculado a una ONG.
+
+  Las propuestas son generadas
+  automáticamente por matching.
+
+  Solo puede consultar propuestas
+  destinadas a su organización.
+end note
+
+' ==========================================
+' CONSULTA DE PROPUESTAS
+' ==========================================
+
+U -> WEB : Abrir bandeja de propuestas
+
+WEB -> API : GET /v1/ong/proposals
+
+API -> ID : Validar sesión, rol y ONG vinculada
+
+' ==========================================
+' CONTROL DE ACCESO
+' ==========================================
+
+alt Sesión ausente, inválida o expirada
+
+  ID --> API : Autenticación inválida
+  API --> WEB : HTTP 401
+  WEB --> U : Solicitar autenticación
+
+else Rol ajeno o ONG no vinculada
+
+  ID --> API : Acceso denegado
+  API --> WEB : HTTP 403
+  WEB --> U : Mostrar acceso denegado
+
+else Identidad autorizada
+
+  ID --> API : Usuario y ongId autorizados
+
+  API -> IN : Consultar propuestas propias\n(ongId, filtros)
+
+  ' ========================================
+  ' RECUPERACIÓN DE PROPUESTAS
+  ' ========================================
+
+  IN -> DB : Leer matching y matching_item\nfiltrados por ongId
+
+  alt Error de lectura
+
+    DB --> IN : Consulta fallida
+    IN --> API : Información no disponible
+    API --> WEB : Error de consulta
+    WEB --> U : Informar indisponibilidad
+
+  else Consulta completada
+
+    DB --> IN : Propuestas, líneas,\nestados, fechas y prioridades
+
+    alt No existen propuestas propias
+
+      IN --> API : Resultado vacío
+      API --> WEB : HTTP 200 + lista vacía
+      WEB --> U : Mostrar bandeja sin propuestas
+
+    else Existen propuestas propias
+
+      ' ====================================
+      ' DISPONIBILIDAD ACTUAL
+      ' ====================================
+
+      IN -> DB : Consultar lotes propios,\nestados y cantidades disponibles
+
+      DB --> IN : Stock físico utilizable\ny autorizaciones pendientes
+
+      ' ====================================
+      ' CONTEXTO DE LAS SOLICITUDES
+      ' ====================================
+
+      IN -> SH : Consultar contexto de solicitudes\nvinculadas a propuestas propias
+
+      SH -> DB : Leer comunidades, necesidades\ny cantidades solicitadas
+
+      DB --> SH : Contexto de las solicitudes
+      SH --> IN : Destinos y necesidades vinculadas
+
+      ' ====================================
+      ' CONSOLIDACIÓN
+      ' ====================================
+
+      IN -> IN : Relacionar propuesta, solicitud,\nlotes y disponibilidad actual
+
+      note over IN
+        Mostrar por propuesta:
+
+        - Comunidad destinataria.
+        - Productos y cantidades propuestas.
+        - Lote y almacén de origen.
+        - Fecha de generación.
+        - Estado de la propuesta.
+        - Prioridad y justificación disponibles.
+        - Disponibilidad actual de la ONG.
+
+        No mostrar propuestas de otras ONG.
+      end note
+
+      ' ====================================
+      ' VIGENCIA INFORMATIVA
+      ' ====================================
+
+      IN -> IN : Evaluar posibles cambios relevantes\nde inventario y cobertura
+
+      alt Información incompleta
+
+        IN --> API : Datos insuficientes para revisión
+        API --> WEB : Consulta incompleta
+        WEB --> U : Informar datos no disponibles
+
+      else Información de revisión disponible
+
+        opt Existen indicios de desactualización
+
+          note over IN
+            Mostrar advertencia informativa.
+
+            No modificar el estado
+            persistido de la propuesta.
+
+            La vigencia se revalida
+            obligatoriamente antes de
+            confirmar o autorizar.
+          end note
+
+        end
+
+        IN --> API : Propuestas propias con contexto,\nestado y disponibilidad
+
+        API --> WEB : HTTP 200 + propuestas propias
+
+        WEB --> U : Mostrar cantidades, destino,\nprioridad y estado
+
+        WEB --> U : Mostrar disponibilidad y\nadvertencias cuando correspondan
+
+      end
+
+    end
+
+  end
+
+end
+
+' ==========================================
+' POSCONDICIÓN
+' ==========================================
+
+note over IN, DB
+  La operación es de solo lectura.
+
+  Consultar una propuesta:
+  - No modifica su estado.
+  - No confirma cantidades.
+  - No reserva ni compromete stock.
+  - No autoriza despachos.
+  - No descuenta inventario.
+  - No ejecuta nuevamente matching.
+
+  La decisión corresponde a CU-ONG-05.
+  La autorización corresponde a CU-ONG-06.
+end note
+
+@enduml

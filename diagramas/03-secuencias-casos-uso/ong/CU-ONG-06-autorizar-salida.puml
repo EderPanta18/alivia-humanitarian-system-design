@@ -1,0 +1,269 @@
+
+@startuml
+title CU-ONG-06 | Autorizar salida de productos — Alivía
+
+hide footbox
+autonumber
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 160
+skinparam BoxPadding 12
+
+' ==========================================
+' PARTICIPANTES
+' ==========================================
+
+actor "Jefe de\nONG" as U
+boundary "Frontend\nNext.js" as WEB
+control "API\nNestJS" as API
+control "Identity" as ID
+control "Inventory" as IN
+control "Shelter" as SH
+control "Logistics" as LO
+database "PostgreSQL" as DB
+
+' ==========================================
+' PRECONDICIÓN
+' ==========================================
+
+note over U, WEB
+  La propuesta debe pertenecer a la ONG
+  y encontrarse en estado CONFIRMED.
+
+  Las cantidades confirmadas deben
+  conservar disponibilidad y cobertura.
+
+  Autorizar no equivale a retirar.
+end note
+
+' ==========================================
+' SOLICITUD DE AUTORIZACIÓN
+' ==========================================
+
+U -> WEB : Revisar productos y cantidades confirmadas
+U -> WEB : Autorizar salida
+
+WEB -> API : POST /v1/ong/proposals/{id}/authorize
+
+note right of WEB
+  Enviar identificador de propuesta
+  y clave de idempotencia.
+
+  Las cantidades autorizables
+  proceden de la confirmación
+  previamente registrada.
+end note
+
+API -> ID : Validar sesión, rol y ONG vinculada
+
+' ==========================================
+' CONTROL DE ACCESO
+' ==========================================
+
+alt Sesión ausente, inválida o expirada
+
+  ID --> API : Autenticación inválida
+  API --> WEB : HTTP 401
+  WEB --> U : Solicitar autenticación
+
+else Rol ajeno o ONG no vinculada
+
+  ID --> API : Acceso denegado
+  API --> WEB : HTTP 403
+  WEB --> U : Mostrar acceso denegado
+
+else Identidad autorizada
+
+  ID --> API : Usuario y ongId autorizados
+
+  API -> IN : Autorizar propuesta\n(proposalId, ongId, actor, clave)
+
+  ' ========================================
+  ' TITULARIDAD E IDEMPOTENCIA
+  ' ========================================
+
+  IN -> DB : Consultar propuesta propia,\nautorización y clave de operación
+
+  DB --> IN : Propuesta y resultado existentes
+
+  alt Propuesta inexistente o ajena
+
+    IN --> API : Recurso no accesible
+    API --> WEB : HTTP 404
+    WEB --> U : No permitir autorización
+
+  else Misma operación ya confirmada
+
+    IN --> API : Autorización y despachos originales
+    API --> WEB : HTTP 200 + resultado previo
+    WEB --> U : Mostrar salida ya autorizada
+
+  else Clave incompatible o autorización distinta existente
+
+    IN --> API : Conflicto de idempotencia
+    API --> WEB : HTTP 409
+    WEB --> U : No duplicar autorización
+
+  else Primera autorización
+
+    ' ======================================
+    ' TRANSACCIÓN DE AUTORIZACIÓN
+    ' ======================================
+
+    IN -> DB : BEGIN y bloqueo de registros\nrelevantes de propuesta e inventario
+
+    DB --> IN : Estado y existencias protegidas
+
+    IN -> IN : Verificar estado CONFIRMED\ny cantidades positivas
+
+    alt Propuesta no confirmada o inválida
+
+      IN -> DB : ROLLBACK
+
+      IN --> API : Transición no permitida
+      API --> WEB : HTTP 409
+      WEB --> U : Mostrar propuesta no autorizable
+
+    else Propuesta confirmada
+
+      ' ====================================
+      ' REVALIDACIÓN DE INVENTARIO
+      ' ====================================
+
+      IN -> DB : Releer lotes, disponibilidad\ny autorizaciones pendientes
+
+      DB --> IN : Existencias y compromisos vigentes
+
+      IN -> IN : Comprobar cantidades, lotes,\nunidades y disponibilidad
+
+      ' ====================================
+      ' REVALIDACIÓN DE COBERTURA
+      ' ====================================
+
+      IN -> SH : Verificar solicitud vigente\ny cobertura todavía elegible
+
+      SH -> DB : Consultar demanda y autorizaciones\ncon protección transaccional
+
+      DB --> SH : Cobertura vigente de la solicitud
+
+      SH --> IN : Resultado de validación
+
+      alt Stock insuficiente o cobertura incompatible
+
+        IN -> DB : ROLLBACK
+
+        IN --> API : Conflicto de disponibilidad
+        API --> WEB : HTTP 409
+        WEB --> U : Actualizar información\ny revisar el conflicto
+
+      else Condiciones válidas
+
+        ' ==================================
+        ' AUTORIZACIÓN Y DESPACHOS
+        ' ==================================
+
+        note over IN, LO
+          Inventory y Logistics deben
+          compartir una única unidad
+          transaccional en PostgreSQL.
+
+          No confirmar parcialmente:
+          la autorización y sus despachos
+          se confirman o revierten juntos.
+        end note
+
+        IN -> DB : Crear inventory.authorization\ncon clave y responsable
+
+        IN -> DB : Cambiar matching a AUTHORIZED
+
+        DB --> IN : Autorización preparada
+
+        IN -> LO : Crear despachos para la autorización\ncon cantidades confirmadas
+
+        LO -> LO : Agrupar líneas por almacén\nconservando origen y destino
+
+        LO -> DB : Crear dispatch AUTHORIZED\ny sus dispatch_item
+
+        alt Error al crear despachos o guardar autorización
+
+          DB --> LO : Error de persistencia
+          LO --> IN : Operación incompleta
+
+          IN -> DB : ROLLBACK
+
+          IN --> API : Autorización no confirmada
+          API --> WEB : Error de operación
+          WEB --> U : No mostrar salida autorizada
+
+        else Autorización y despachos preparados
+
+          DB --> LO : Despachos y líneas registrados
+          LO --> IN : IDs de despachos creados
+
+          ' ================================
+          ' CONFIRMACIÓN ATÓMICA
+          ' ================================
+
+          IN -> DB : COMMIT
+
+          alt Confirmación persistida
+
+            DB --> IN : COMMIT confirmado
+
+            IN --> API : Autorización y despachos\ncon estado AUTHORIZED
+
+            API --> WEB : HTTP 200 + salida autorizada
+
+            WEB --> U : Mostrar compromiso confirmado\ny despachos habilitados
+
+          else Resultado de COMMIT no verificable
+
+            DB --> IN : Confirmación incierta
+
+            IN --> API : No se puede acreditar éxito
+            API --> WEB : Estado pendiente de verificar
+
+            WEB --> U : Consultar estado antes de reintentar\ncon la misma clave
+
+          end
+
+        end
+
+      end
+
+    end
+
+  end
+
+end
+
+' ==========================================
+' POSCONDICIÓN
+' ==========================================
+
+note over IN, DB
+  Una autorización exitosa conserva:
+
+  - Propuesta en AUTHORIZED.
+  - Registro único de autorización.
+  - Cantidades previamente confirmadas.
+  - Despachos AUTHORIZED por almacén.
+  - Líneas vinculadas a la autorización.
+  - Responsable, fecha y clave de operación.
+  - Compromiso sin doble contabilización.
+
+  El inventario físico no disminuye.
+
+  La disponibilidad excluye lo
+  autorizado pendiente de retiro.
+
+  El descuento físico ocurre únicamente
+  al confirmar el retiro en CU-BRI-04.
+end note
+
+@enduml

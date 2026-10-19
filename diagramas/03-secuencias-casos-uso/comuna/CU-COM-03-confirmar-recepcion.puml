@@ -1,0 +1,271 @@
+
+@startuml
+title CU-COM-03 | Confirmar recepción de ayuda — Alivía
+
+hide footbox
+autonumber
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 160
+skinparam BoxPadding 12
+
+' ==========================================
+' PARTICIPANTES
+' ==========================================
+
+actor "Jefe de\nComuna" as U
+boundary "Frontend\nNext.js" as WEB
+control "API\nNestJS" as API
+control "Identity" as ID
+control "Logistics" as LO
+control "Shelter" as SH
+database "PostgreSQL" as DB
+queue "Evento interno /\ncola" as EV
+collections "Almacenamiento\nde documentos" as FS
+
+' ==========================================
+' PRECONDICIÓN
+' ==========================================
+
+note over U, WEB
+  El despacho debe pertenecer
+  a la comunidad y tener
+  llegada registrada (ARRIVED).
+
+  El jefe verifica físicamente
+  los productos recibidos.
+end note
+
+' ==========================================
+' VERIFICACIÓN DEL DESPACHO
+' ==========================================
+
+U -> WEB : Revisar productos y cantidades enviadas
+U -> WEB : Registrar cantidades recibidas y conformes
+
+alt Existen faltantes, daños u observaciones
+
+  WEB --> U : Continuar en CU-COM-04\nRecepción con discrepancias
+
+else Recepción completamente conforme
+
+  U -> WEB : Confirmar recepción
+  WEB -> API : POST /v1/receipts
+
+  note right of WEB
+    Enviar despacho, líneas,
+    cantidades y clave
+    de idempotencia.
+  end note
+
+  API -> ID : Validar sesión, rol y comunidad vinculada
+
+  ' ========================================
+  ' CONTROL DE ACCESO
+  ' ========================================
+
+  alt Sesión ausente, inválida o expirada
+
+    ID --> API : Autenticación inválida
+    API --> WEB : HTTP 401
+    WEB --> U : Solicitar autenticación
+
+  else Rol ajeno o comunidad no vinculada
+
+    ID --> API : Acceso denegado
+    API --> WEB : HTTP 403
+    WEB --> U : Mostrar acceso denegado
+
+  else Identidad autorizada
+
+    ID --> API : Usuario y communityId autorizados
+
+    API -> SH : Confirmar recepción\n(despacho, líneas, usuario, clave)
+
+    ' ======================================
+    ' IDEMPOTENCIA
+    ' ======================================
+
+    SH -> DB : Consultar operación previa\ny recepción del despacho
+    DB --> SH : Estado y resultado existente
+
+    alt Reintento idéntico ya confirmado
+
+      SH --> API : Resultado previo de recepción
+      API --> WEB : Resultado original
+      WEB --> U : Mostrar recepción ya confirmada
+
+    else Clave incompatible o recepción distinta existente
+
+      SH --> API : Conflicto de operación
+      API --> WEB : HTTP 409
+      WEB --> U : No permitir otra recepción
+
+    else Primera confirmación
+
+      ' ====================================
+      ' VALIDACIÓN LOGÍSTICA
+      ' ====================================
+
+      SH -> LO : Consultar despacho,\ndestino, llegada y cantidades
+
+      LO -> DB : Leer despacho y líneas enviadas
+      DB --> LO : Estado, destino y cantidades
+      LO --> SH : Información logística
+
+      alt Despacho inexistente o ajeno
+
+        SH --> API : Recurso no accesible
+        API --> WEB : Recurso no encontrado o denegado
+        WEB --> U : No permitir recepción
+
+      else Despacho sin llegada registrada
+
+        SH --> API : Precondición incumplida
+        API --> WEB : HTTP 409
+        WEB --> U : Recepción no habilitada
+
+      else Despacho propio con llegada registrada
+
+        ' ==================================
+        ' VALIDACIÓN DE CANTIDADES
+        ' ==================================
+
+        SH -> SH : Validar líneas y cantidades
+
+        note over SH
+          Para cada línea:
+          0 <= conforme <= recibida <= enviada
+
+          En recepción CONFORMING:
+          conforme = recibida = enviada.
+
+          No debe haber observaciones
+          de faltantes o daños.
+        end note
+
+        alt Cantidades o líneas inválidas
+
+          SH --> API : Errores de validación
+          API --> WEB : HTTP 422
+          WEB --> U : Corregir datos de recepción
+
+        else Se detectan discrepancias válidas
+
+          SH --> API : Requiere variante con observaciones
+          API --> WEB : Continuar recepción discrepante
+          WEB --> U : Registrar observaciones\nmediante CU-COM-04
+
+        else Recepción conforme válida
+
+          ' ================================
+          ' PERSISTENCIA
+          ' ================================
+
+          SH -> DB : Registrar recepción CONFORMING,\nlíneas, responsable y fecha\ncon unicidad por despacho
+
+          alt Error o conflicto de persistencia
+
+            DB --> SH : Operación no confirmada
+            SH --> API : Recepción no finalizada
+            API --> WEB : Error o conflicto
+            WEB --> U : No mostrar éxito
+
+          else Recepción confirmada
+
+            DB --> SH : Recepción persistida
+
+            SH --> API : UUID, CONFORMING y fecha
+            API --> WEB : HTTP 201 + recepción confirmada
+            WEB --> U : Mostrar recepción finalizada
+
+            ' ==============================
+            ' PROCESAMIENTO AUTOMÁTICO
+            ' ==============================
+
+            SH ->> EV : RecepcionFinalizada\n(receiptId, dispatchId)
+
+            note over SH, EV
+              Procesamiento asíncrono.
+
+              La recepción permanece
+              finalizada aunque falle
+              la generación documental.
+
+              La entrega recuperable
+              del evento requiere
+              un mecanismo definido.
+            end note
+
+          end
+
+        end
+
+      end
+
+    end
+
+  end
+
+end
+
+' ==========================================
+' FINALIZACIÓN Y DOCUMENTOS
+' ==========================================
+
+opt Procesamiento posterior de RecepcionFinalizada
+
+  EV ->> LO : Procesar recepción finalizada
+
+  LO -> DB : Verificar evento y finalizar\ndespacho idempotentemente
+  DB --> LO : Despacho FINALIZED
+
+  LO -> LO : Preparar manifiesto XLSX\ny acta PDF
+
+  LO -> FS : Guardar documentos del despacho
+
+  alt Documentos generados correctamente
+
+    FS --> LO : Referencias de archivos
+    LO -> DB : Registrar documentos únicos\npor despacho y tipo
+    DB --> LO : Documentos registrados
+
+  else Fallo de generación o almacenamiento
+
+    FS --> LO : Error documental
+
+    note over LO, FS
+      La recepción confirmada
+      no se revierte.
+
+      El procesamiento documental
+      queda pendiente de recuperación
+      o reintento seguro.
+    end note
+
+  end
+
+end
+
+' ==========================================
+' POSCONDICIÓN
+' ==========================================
+
+note over SH, DB
+  Una recepción exitosa conserva:
+  - Un registro final por despacho.
+  - Cantidades recibidas y conformes.
+  - Responsable y fecha del servidor.
+  - Resultado CONFORMING.
+  - Protección contra duplicados.
+
+  No modifica el descuento físico
+  realizado durante el retiro.
+end note
+
+@enduml

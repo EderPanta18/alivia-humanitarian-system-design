@@ -1,0 +1,240 @@
+
+@startuml
+!pragma layout smetana
+
+title EST-04 | Despliegue cloud propuesto — Alivía
+
+left to right direction
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam monochrome true
+skinparam linetype ortho
+skinparam componentStyle uml2
+skinparam wrapWidth 200
+skinparam nodesep 35
+skinparam ranksep 45
+
+' ==========================================
+' DISPOSITIVO DEL USUARIO
+' ==========================================
+
+node "Dispositivo del usuario" as DEVICE {
+
+  artifact "Navegador web\nChrome / Firefox" as BROWSER
+
+}
+
+cloud "Internet / HTTPS" as WEB
+
+' ==========================================
+' FRONTEND - VERCEL
+' ==========================================
+
+node "Vercel\n(propuesto)" as VERCEL {
+
+  artifact "Next.js\nInterfaz por rol" as FRONT
+
+  artifact "BFF / Proxy HTTP\nRoute Handlers" as BFF
+
+}
+
+' ==========================================
+' BACKEND - RENDER
+' ==========================================
+
+node "Render\n(propuesto)" as RENDER {
+
+  artifact "API NestJS\nMonolito modular" as API
+
+  artifact "Procesamiento interno\nEventos y tareas" as JOBS
+
+}
+
+' ==========================================
+' PERSISTENCIA - SUPABASE
+' ==========================================
+
+node "Supabase\n(propuesto)" as SUPA {
+
+  database "PostgreSQL\nadministrado" as PG
+
+  artifact "Almacenamiento de\nExcel y PDF" as STORE
+
+}
+
+' ==========================================
+' INTEGRACIONES EXTERNAS
+' ==========================================
+
+cloud "Fuentes externas candidatas" as SOURCES {
+
+  artifact "IGP / SENAMHI\nFIRMS / Copernicus" as OBS
+
+}
+
+cloud "Proveedor cartográfico\ny de rutas" as MAPS {
+
+  artifact "Servicio de mapas /\nruteo por definir" as ROUTES
+
+}
+
+' ==========================================
+' ACCESO DESDE EL NAVEGADOR
+' ==========================================
+
+BROWSER --> WEB : HTTPS / TLS
+
+WEB --> FRONT : Aplicación web
+
+FRONT --> BFF : Solicitudes al mismo origen
+
+' ==========================================
+' COMUNICACIÓN FRONTEND - BACKEND
+' ==========================================
+
+BFF --> API : HTTPS / REST\nSesión y credenciales
+
+note on link
+  El navegador utiliza
+  el origen del frontend.
+
+  El BFF intermedia las
+  solicitudes protegidas.
+
+  La API valida permisos
+  y titularidad nuevamente.
+end note
+
+' ==========================================
+' PERSISTENCIA OPERATIVA
+' ==========================================
+
+API --> PG : PostgreSQL / TLS\nPrisma
+
+JOBS --> PG : Lectura y escritura\nautorizadas
+
+' ==========================================
+' DOCUMENTOS GENERADOS
+' ==========================================
+
+API --> STORE : Almacenar y recuperar\nExcel / PDF autorizados
+
+JOBS ..> STORE : Generación asíncrona\nsi corresponde
+
+' ==========================================
+' PROCESAMIENTO AUTOMÁTICO
+' ==========================================
+
+API ..> JOBS : Activación lógica de trabajos\nmecanismo por definir
+
+note bottom of JOBS
+  Procesos automáticos:
+
+  - Matching y recálculo.
+  - Ingesta externa programada.
+  - Publicación del informe final.
+  - Generación documental cuando aplique.
+
+  No se presupone una cola
+  administrada independiente.
+
+  La ejecución puede configurarse
+  en procesos separados según
+  necesidades operativas.
+end note
+
+' ==========================================
+' INTEGRACIONES EXTERNAS
+' ==========================================
+
+API ..> OBS : HTTPS / consulta autorizada
+
+JOBS ..> OBS : Ingesta programada\nsegún configuración
+
+API ..> ROUTES : HTTPS / cálculo de rutas
+
+' ==========================================
+' RESTRICCIONES DEL DESPLIEGUE
+' ==========================================
+
+note bottom of VERCEL
+  Next.js sirve las interfaces
+  y dispone del BFF / Proxy.
+
+  La cookie HttpOnly no necesita
+  exponerse a JavaScript.
+
+  Las credenciales de backend
+  permanecen del lado servidor.
+end note
+
+note bottom of RENDER
+  Backend modular NestJS.
+
+  API y tareas internas pueden
+  compartir código y módulos.
+
+  Su distribución en procesos
+  se define durante el despliegue.
+
+  Debe garantizarse la ejecución
+  fiable de operaciones críticas.
+end note
+
+note bottom of SUPA
+  PostgreSQL conserva los datos
+  de los módulos del dominio.
+
+  El almacenamiento de archivos
+  se mantiene separado de los
+  registros operativos.
+
+  El acceso a los documentos
+  requiere autorización.
+
+  El uso definitivo de Storage
+  está sujeto a configuración.
+end note
+
+note bottom of SOURCES
+  Proveedores candidatos.
+
+  Su integración requiere
+  verificar disponibilidad,
+  credenciales, licencias
+  y condiciones de uso.
+
+  Los datos externos no declaran
+  emergencias automáticamente.
+end note
+
+note bottom of MAPS
+  El proveedor de rutas
+  todavía debe confirmarse.
+
+  Una ruta calculada no equivale
+  a transitabilidad garantizada.
+
+  Logistics valida su vigencia
+  antes del retiro.
+end note
+
+legend bottom
+  ESTADO: arquitectura propuesta.
+
+  El diagrama no acredita
+  servicios desplegados o activos.
+
+  Producción requiere configurar:
+  - HTTPS y gestión de secretos.
+  - Disponibilidad de procesos.
+  - Respaldos y recuperación.
+  - Observabilidad.
+  - Acceso mínimo a recursos.
+  - Reintentos e idempotencia.
+endlegend
+
+@enduml

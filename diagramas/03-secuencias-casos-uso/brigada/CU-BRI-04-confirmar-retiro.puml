@@ -1,0 +1,243 @@
+
+@startuml
+title CU-BRI-04 | Verificar y confirmar retiro completo — Alivía
+
+hide footbox
+autonumber
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 160
+skinparam BoxPadding 12
+
+' ==========================================
+' PARTICIPANTES
+' ==========================================
+
+actor "Jefe de\nBrigada" as U
+boundary "Frontend\nNext.js" as WEB
+control "API\nNestJS" as API
+control "Identity" as ID
+control "Logistics" as LO
+control "Inventory" as IN
+database "PostgreSQL" as DB
+
+' ==========================================
+' PRECONDICIÓN
+' ==========================================
+
+note over U, WEB
+  El despacho debe estar autorizado,
+  asignado a la brigada y preparado.
+
+  El jefe comprueba físicamente
+  la totalidad de la carga autorizada.
+
+  No se permiten retiros parciales.
+end note
+
+' ==========================================
+' CONFIRMACIÓN
+' ==========================================
+
+U -> WEB : Cotejar carga con despacho autorizado
+U -> WEB : Confirmar retiro completo
+
+WEB -> API : POST /v1/brigade/dispatches/{id}/withdraw
+note right of WEB
+  Enviar clave de idempotencia
+  y confirmación de carga íntegra.
+end note
+
+API -> ID : Validar sesión, rol y brigada vinculada
+
+' ==========================================
+' CONTROL DE ACCESO
+' ==========================================
+
+alt Sesión ausente, inválida o expirada
+
+  ID --> API : Autenticación inválida
+  API --> WEB : HTTP 401
+  WEB --> U : Solicitar autenticación
+
+else Rol ajeno o brigada no vinculada
+
+  ID --> API : Acceso denegado
+  API --> WEB : HTTP 403
+  WEB --> U : Mostrar acceso denegado
+
+else Identidad autorizada
+
+  ID --> API : Contexto autorizado
+
+  API -> LO : Confirmar retiro completo
+  note right of LO
+    Datos de entrada:
+    despacho, actor, brigada
+    y clave de idempotencia.
+  end note
+
+  LO -> DB : Verificar titularidad e idempotencia
+  DB --> LO : Despacho y resultado previo
+
+  ' ========================================
+  ' VALIDACIONES PREVIAS
+  ' ========================================
+
+  alt Despacho inexistente o ajeno
+
+    LO --> API : Recurso no accesible
+    API --> WEB : Acceso denegado o no encontrado
+    WEB --> U : No permitir el retiro
+
+  else Reintento idéntico ya completado
+
+    LO --> API : Resultado previamente confirmado
+    API --> WEB : Resultado original del retiro
+    WEB --> U : Mostrar retiro ya confirmado
+
+  else Clave reutilizada con datos diferentes
+
+    LO --> API : Conflicto de idempotencia
+    API --> WEB : HTTP 409
+    WEB --> U : Rechazar operación incompatible
+
+  else Nueva confirmación
+
+    ' ======================================
+    ' UNIDAD TRANSACCIONAL
+    ' ======================================
+
+    LO -> DB : Iniciar transacción y bloquear\nregistros operativos relevantes
+    DB --> LO : Estado, ruta y cantidades vigentes
+
+    note over LO, IN
+      Logistics coordina una única
+      operación transaccional.
+
+      El descuento de Inventory
+      y el cambio de estado de
+      Logistics deben ser atómicos.
+    end note
+
+    alt Despacho no está AUTHORIZED
+
+      LO -> DB : ROLLBACK
+      LO --> API : Transición inválida
+      API --> WEB : HTTP 409
+      WEB --> U : Retiro no permitido
+
+    else Ruta inválida o verificación vencida
+
+      note over LO, DB
+        Se exige:
+        - Ruta AVAILABLE.
+        - Vigencia menor a 30 minutos.
+        - Sin tramos UNKNOWN
+          ni IMPASSABLE.
+      end note
+
+      LO -> DB : ROLLBACK
+      LO --> API : Ruta no habilita retiro
+      API --> WEB : HTTP 409
+      WEB --> U : Mostrar retiro bloqueado
+
+    else Carga no confirmada íntegramente
+
+      LO -> DB : ROLLBACK
+      LO --> API : Confirmación incompleta
+      API --> WEB : Operación rechazada
+      WEB --> U : Completar verificación física
+
+    else Condiciones válidas
+
+      ' ====================================
+      ' DESCUENTO DE INVENTARIO
+      ' ====================================
+
+      LO -> IN : Aplicar retiro de cantidades\nautorizadas del despacho
+
+      IN -> DB : Validar lotes y compromisos;\ndescontar físico y registrar movimiento
+
+      alt Stock inconsistente o descuento fallido
+
+        DB --> IN : Error de operación
+        IN --> LO : Descuento no confirmado
+
+        LO -> DB : ROLLBACK
+        LO --> API : Retiro no confirmado
+        API --> WEB : Error o conflicto operativo
+        WEB --> U : Informar retiro pendiente
+
+      else Descuento completo válido
+
+        DB --> IN : Descuento registrado
+        IN --> LO : Movimiento y cantidades retiradas
+
+        LO -> DB : Registrar WITHDRAWN,\nresponsable, fecha y cantidades
+
+        alt Fallo al actualizar despacho
+
+          DB --> LO : Actualización fallida
+          LO -> DB : ROLLBACK
+
+          LO --> API : Retiro no confirmado
+          API --> WEB : Error de operación
+          WEB --> U : No mostrar éxito
+
+        else Actualización correcta
+
+          DB --> LO : Despacho actualizado
+
+          LO -> DB : Guardar resultado idempotente\ny COMMIT
+
+          alt Confirmación persistida
+
+            DB --> LO : COMMIT confirmado
+
+            LO --> API : Retiro completo confirmado
+            API --> WEB : HTTP 200 + estado WITHDRAWN
+            WEB --> U : Mostrar retiro confirmado\ny habilitar traslado
+
+          else Fallo o resultado incierto del COMMIT
+
+            DB --> LO : Resultado no confirmado
+            LO --> API : No se puede acreditar éxito
+            API --> WEB : Estado pendiente de verificar
+            WEB --> U : Consultar estado antes de reintentar
+
+          end
+
+        end
+
+      end
+
+    end
+
+  end
+
+end
+
+' ==========================================
+' POSCONDICIÓN
+' ==========================================
+
+note over LO, DB
+  Una operación exitosa conserva:
+  - Retiro íntegro de lo autorizado.
+  - Un único descuento físico.
+  - Movimiento de inventario trazable.
+  - Despacho en estado WITHDRAWN.
+  - Responsable y fecha/hora del servidor.
+  - Resultado idempotente persistido.
+
+  Un fallo no puede dejar el despacho
+  retirado sin descuento confirmado.
+end note
+
+@enduml

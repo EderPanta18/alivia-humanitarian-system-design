@@ -1,0 +1,176 @@
+
+@startuml
+title CU-COM-02 | Consultar estado de solicitud — Alivía
+
+hide footbox
+autonumber
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 160
+skinparam BoxPadding 12
+
+' ==========================================
+' PARTICIPANTES
+' ==========================================
+
+actor "Jefe de\nComuna" as U
+boundary "Frontend\nNext.js" as WEB
+control "API\nNestJS" as API
+control "Identity" as ID
+control "Shelter" as SH
+control "Inventory" as IN
+control "Logistics" as LO
+database "PostgreSQL" as DB
+
+' ==========================================
+' PRECONDICIÓN
+' ==========================================
+
+note over U, WEB
+  El usuario consulta una solicitud
+  perteneciente a su comunidad.
+
+  La consulta es de solo lectura
+  y no expone inventarios privados
+  ni propuestas de otras organizaciones.
+end note
+
+' ==========================================
+' CONSULTA
+' ==========================================
+
+U -> WEB : Seleccionar solicitud propia
+WEB -> API : GET /v1/requests/{id}
+
+API -> ID : Validar sesión, rol y comunidad vinculada
+
+' ==========================================
+' CONTROL DE ACCESO
+' ==========================================
+
+alt Sesión ausente, inválida o expirada
+
+  ID --> API : Autenticación inválida
+  API --> WEB : HTTP 401
+  WEB --> U : Solicitar autenticación
+
+else Rol ajeno o comunidad no vinculada
+
+  ID --> API : Acceso denegado
+  API --> WEB : HTTP 403
+  WEB --> U : Mostrar acceso denegado
+
+else Identidad autorizada
+
+  ID --> API : Usuario y communityId autorizados
+
+  API -> SH : Consultar solicitud\n(requestId, communityId)
+
+  ' ========================================
+  ' TITULARIDAD DE LA SOLICITUD
+  ' ========================================
+
+  SH -> DB : Buscar solicitud limitada\na la comunidad autenticada
+  DB --> SH : Solicitud propia o sin resultado
+
+  alt Solicitud inexistente o ajena
+
+    SH --> API : Recurso no accesible
+    API --> WEB : HTTP 404
+    WEB --> U : Mostrar solicitud no disponible
+
+  else Solicitud propia encontrada
+
+    ' ======================================
+    ' NECESIDADES Y RECEPCIONES
+    ' ======================================
+
+    SH -> DB : Leer líneas solicitadas,\nrecepciones y cantidades conformes
+    DB --> SH : Necesidades y recepciones registradas
+
+    ' ======================================
+    ' COMPROMISOS AUTORIZADOS
+    ' ======================================
+
+    SH -> IN : Consultar aportes autorizados\nvinculados a la solicitud
+
+    IN -> DB : Leer autorizaciones y cantidades\npor producto de la solicitud
+    DB --> IN : Cantidades autorizadas
+
+    IN --> SH : Compromisos y referencias
+
+    ' ======================================
+    ' SEGUIMIENTO DE DESPACHOS
+    ' ======================================
+
+    SH -> LO : Consultar despachos vinculados\ny estados logísticos
+
+    LO -> DB : Leer despachos, cantidades\ny estados de traslado
+    DB --> LO : Datos logísticos vinculados
+
+    LO --> SH : Despachos y progreso de entrega
+
+    ' ======================================
+    ' CONSOLIDACIÓN
+    ' ======================================
+
+    SH -> SH : Consolidar cobertura por producto\nsin duplicar cantidades
+
+    note over SH
+      Distinguir:
+      - Cantidad solicitada.
+      - Necesidad nunca cubierta.
+      - Autorizado aún pendiente.
+      - Cantidad recibida conforme.
+      - Discrepancias de recepciones.
+
+      Las propuestas no son compromisos.
+
+      Una llegada no constituye
+      recepción conforme.
+    end note
+
+    alt Información necesaria no disponible
+
+      SH --> API : Consulta incompleta
+      API --> WEB : Error de consulta
+      WEB --> U : No presentar saldos incompletos\ncomo cobertura confirmada
+
+    else Resumen consolidado correctamente
+
+      SH --> API : Solicitud, cobertura\ny estados de despachos
+
+      API --> WEB : HTTP 200 + resumen por producto
+
+      WEB --> U : Mostrar cantidades requeridas,\nsin cobertura y comprometidas
+
+      WEB --> U : Mostrar recibidas conformes,\ndespachos y discrepancias
+
+    end
+
+  end
+
+end
+
+' ==========================================
+' POSCONDICIÓN
+' ==========================================
+
+note over SH, DB
+  La consulta no modifica solicitudes,
+  autorizaciones, recepciones ni inventario.
+
+  Los aportes propuestos no cuentan
+  como cantidades comprometidas.
+
+  Los productos faltantes o dañados
+  en recepciones finalizadas no
+  reactivan automáticamente el matching.
+end note
+
+@enduml

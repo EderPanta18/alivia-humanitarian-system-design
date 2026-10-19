@@ -1,0 +1,77 @@
+
+@startuml
+title UC-03 | Casos de uso del Jefe de Brigada — Alivía
+
+left to right direction
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam packageStyle rectangle
+skinparam nodesep 45
+skinparam ranksep 55
+skinparam roundCorner 8
+
+' ==========================================
+' ACTOR
+' ==========================================
+
+actor "Jefe de\nBrigada" as BRI
+
+' ==========================================
+' CASOS DE USO
+' ==========================================
+
+rectangle "Alivía — Despachos y rutas" {
+
+  usecase "CU-BRI-01\nConsultar despachos\nautorizados" as BRI01
+
+  usecase "CU-BRI-02\nConsultar ruta\nde despacho" as BRI02
+
+  usecase "CU-BRI-03\nRegistrar llegada\nal destino" as BRI03
+
+  usecase "CU-BRI-04\nVerificar y confirmar\nretiro completo" as BRI04
+
+  usecase "Comprobar ruta\ndisponible y vigente" as RUTA
+
+}
+
+' ==========================================
+' ASOCIACIONES
+' ==========================================
+
+BRI -- BRI01
+BRI -- BRI02
+BRI -- BRI03
+BRI -- BRI04
+
+' ==========================================
+' RELACIONES UML
+' ==========================================
+
+' La verificación de ruta es obligatoria
+' antes de confirmar el retiro completo.
+BRI04 ..> RUTA : <<include>>
+
+' ==========================================
+' REGLAS PRINCIPALES
+' ==========================================
+
+legend bottom
+  Reglas funcionales:
+
+  - Solo se operan despachos asignados
+    y autorizados para la brigada.
+  - El retiro requiere ruta AVAILABLE,
+    verificada hace menos de 30 minutos,
+    sin tramos UNKNOWN o IMPASSABLE.
+  - Solo se permite confirmar la carga completa.
+  - El retiro descuenta inventario físico una vez.
+  - Registrar llegada no confirma recepción
+    ni conformidad de los productos.
+  - Los reintentos no duplican operaciones.
+endlegend
+
+@enduml

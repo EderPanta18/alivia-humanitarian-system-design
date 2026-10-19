@@ -1,0 +1,79 @@
+
+@startuml
+title UC-09 | Verificación y recepción de ayuda — Alivía
+
+left to right direction
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam packageStyle rectangle
+skinparam nodesep 45
+skinparam ranksep 55
+skinparam roundCorner 8
+
+' ==========================================
+' ACTOR
+' ==========================================
+
+actor "Jefe de\nComuna" as COM
+
+' ==========================================
+' CASOS DE USO
+' ==========================================
+
+rectangle "Alivía — Verificación y recepción de ayuda" {
+
+  usecase "CU-COM-03\nConfirmar recepción\nde ayuda" as COM03
+
+  usecase "CU-COM-04\nRegistrar recepción\ncon discrepancias" as COM04
+
+}
+
+' ==========================================
+' ASOCIACIONES
+' ==========================================
+
+COM -- COM03
+
+' ==========================================
+' RELACIONES UML
+' ==========================================
+
+' Las discrepancias constituyen
+' una variante condicional de recepción.
+COM04 ..> COM03 : <<extend>>
+
+' ==========================================
+' REGLAS PRINCIPALES
+' ==========================================
+
+legend bottom
+  Reglas funcionales:
+
+  - La recepción requiere un despacho
+    propio con llegada registrada.
+  - La Comuna consulta el detalle enviado
+    y verifica físicamente los productos.
+  - Por cada línea se valida:
+    0 <= conforme <= recibida <= enviada.
+  - Los faltantes se calculan como
+    cantidad enviada menos recibida.
+  - Los productos dañados cuentan como
+    recibidos, pero no conformes.
+  - La recepción puede finalizar conforme
+    o como WITH_OBSERVATIONS.
+  - Las discrepancias quedan registradas
+    y no reactivan automáticamente
+    el matching.
+  - Solo se permite una recepción
+    finalizada por despacho.
+  - Tras finalizar la recepción se generan
+    el manifiesto XLSX y el acta PDF.
+    Un fallo documental no revierte
+    la recepción confirmada.
+endlegend
+
+@enduml

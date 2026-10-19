@@ -1,0 +1,174 @@
+
+@startuml
+title CU-DC-03 | Consultar informe final publicado — Alivía
+
+hide footbox
+autonumber
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 160
+skinparam BoxPadding 12
+
+' ==========================================
+' PARTICIPANTES
+' ==========================================
+
+actor "Jefe de\nDefensa Civil" as U
+boundary "Frontend\nNext.js" as WEB
+control "API\nNestJS" as API
+control "Identity" as ID
+control "Consulta de\nsupervisión" as CO
+database "PostgreSQL" as DB
+
+' ==========================================
+' PRECONDICIÓN
+' ==========================================
+
+note over U, WEB
+  El usuario debe tener una sesión
+  válida y el rol defensaCivil.
+
+  El informe solo es consultable
+  después de procesar el evento
+  EMERGENCIA_FINALIZADA
+  y completar su publicación.
+
+  La consulta es de solo lectura.
+end note
+
+' ==========================================
+' CONSULTA DE INFORMES
+' ==========================================
+
+U -> WEB : Abrir informes finales publicados
+
+WEB -> API : GET /v1/supervision/final-reports
+
+API -> ID : Validar sesión y rol defensaCivil
+
+' ==========================================
+' CONTROL DE ACCESO
+' ==========================================
+
+alt Sesión ausente, inválida o expirada
+
+  ID --> API : Autenticación inválida
+  API --> WEB : HTTP 401
+  WEB --> U : Solicitar autenticación
+
+else Rol diferente de defensaCivil
+
+  ID --> API : Acceso denegado
+  API --> WEB : HTTP 403
+  WEB --> U : Mostrar acceso denegado
+
+else Consulta autorizada
+
+  ID --> API : Rol defensaCivil validado
+
+  API -> CO : Consultar informes finales publicados
+
+  ' ========================================
+  ' LECTURA DE INFORMES
+  ' ========================================
+
+  CO -> DB : Consultar informes publicados\ndel escenario configurado
+
+  note over CO, DB
+    Consultar exclusivamente
+    informes ya publicados.
+
+    No generar informes bajo demanda
+    ni recalcular el contenido
+    al abrir la consulta.
+  end note
+
+  alt Fallo de consulta
+
+    DB --> CO : Error de lectura
+    CO --> API : Consulta no completada
+    API --> WEB : Error de consulta
+    WEB --> U : Informar indisponibilidad
+
+  else Consulta completada
+
+    DB --> CO : Informes publicados disponibles
+
+    ' ======================================
+    ' DISPONIBILIDAD
+    ' ======================================
+
+    alt No existe informe publicado
+
+      CO --> API : Sin informes disponibles
+      API --> WEB : HTTP 200 + lista vacía
+
+      WEB --> U : Mostrar informe no disponible
+
+      note over WEB, U
+        Un cierre pendiente de
+        procesamiento o publicación
+        no habilita la consulta.
+      end note
+
+    else Existe informe final publicado
+
+      CO --> API : Informe inmutable y fecha de corte
+      API --> WEB : HTTP 200 + informe publicado
+
+      WEB --> U : Mostrar informe disponible
+
+      U -> WEB : Seleccionar informe final
+
+      ' ====================================
+      ' PRESENTACIÓN
+      ' ====================================
+
+      WEB --> U : Mostrar resultados consolidados\ny trazabilidad histórica
+
+      note over WEB, U
+        Contenido del informe:
+
+        - Fecha de corte.
+        - Solicitudes y necesidades.
+        - Autorizaciones y aportes.
+        - Despachos y traslados.
+        - Recepciones conformes.
+        - Brechas pendientes.
+        - Incidencias y discrepancias.
+        - Acciones y responsables.
+
+        Los valores corresponden
+        al corte publicado.
+      end note
+
+    end
+
+  end
+
+end
+
+' ==========================================
+' POSCONDICIÓN
+' ==========================================
+
+note over CO, DB
+  El informe es único por evento
+  de finalización e inmutable
+  después de su publicación.
+
+  La consulta no modifica datos,
+  no genera nuevas versiones
+  ni reprocesa el evento de cierre.
+
+  Defensa Civil no dispone de acciones
+  para declarar, finalizar o reabrir
+  emergencias desde esta consulta.
+end note
+
+@enduml

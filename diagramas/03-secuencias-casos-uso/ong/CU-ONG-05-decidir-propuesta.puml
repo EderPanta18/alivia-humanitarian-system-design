@@ -1,0 +1,316 @@
+
+@startuml
+title CU-ONG-05 | Confirmar, reducir o rechazar propuesta — Alivía
+
+hide footbox
+autonumber
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 160
+skinparam BoxPadding 12
+
+' ==========================================
+' PARTICIPANTES
+' ==========================================
+
+actor "Jefe de\nONG" as U
+boundary "Frontend\nNext.js" as WEB
+control "API\nNestJS" as API
+control "Identity" as ID
+control "Inventory" as IN
+control "Shelter" as SH
+database "PostgreSQL" as DB
+queue "Evento interno /\ncola de matching" as EV
+
+' ==========================================
+' PRECONDICIÓN
+' ==========================================
+
+note over U, WEB
+  La propuesta debe pertenecer
+  a la ONG autenticada y encontrarse
+  en estado PROPOSED.
+
+  La ONG puede confirmar todas
+  las cantidades, reducir algunas
+  o rechazar la propuesta completa.
+
+  La decisión no autoriza salida.
+end note
+
+' ==========================================
+' DECISIÓN DEL JEFE DE ONG
+' ==========================================
+
+U -> WEB : Revisar propuesta y cantidades
+U -> WEB : Elegir confirmar, reducir o rechazar
+
+WEB -> API : POST /v1/ong/proposals/{id}/confirm\n o POST /v1/ong/proposals/{id}/reject
+
+note right of WEB
+  Enviar decisión, cantidades
+  confirmadas o motivo de rechazo,
+  y clave de idempotencia.
+end note
+
+API -> ID : Validar sesión, rol y ONG vinculada
+
+' ==========================================
+' CONTROL DE ACCESO
+' ==========================================
+
+alt Sesión ausente, inválida o expirada
+
+  ID --> API : Autenticación inválida
+  API --> WEB : HTTP 401
+  WEB --> U : Solicitar autenticación
+
+else Rol ajeno o ONG no vinculada
+
+  ID --> API : Acceso denegado
+  API --> WEB : HTTP 403
+  WEB --> U : Mostrar acceso denegado
+
+else Identidad autorizada
+
+  ID --> API : Usuario y ongId autorizados
+
+  API -> IN : Registrar decisión sobre propuesta
+
+  ' ========================================
+  ' IDEMPOTENCIA Y TITULARIDAD
+  ' ========================================
+
+  IN -> DB : Verificar operación previa,\npropuesta y ONG destinataria
+
+  DB --> IN : Resultado y propuesta existente
+
+  alt Propuesta inexistente o ajena
+
+    IN --> API : Recurso no accesible
+    API --> WEB : HTTP 404
+    WEB --> U : No permitir la decisión
+
+  else Reintento idéntico ya confirmado
+
+    IN --> API : Resultado previamente registrado
+    API --> WEB : Resultado original
+    WEB --> U : Mostrar decisión existente
+
+  else Clave incompatible o propuesta ya decidida
+
+    IN --> API : Conflicto de operación
+    API --> WEB : HTTP 409
+    WEB --> U : Mostrar propuesta no modificable
+
+  else Nueva decisión
+
+    ' ======================================
+    ' CONTROL TRANSACCIONAL
+    ' ======================================
+
+    IN -> DB : Iniciar transacción y bloquear propuesta
+
+    IN -> DB : Releer estado y líneas propuestas
+    DB --> IN : Estado y cantidades vigentes
+
+    alt Estado distinto de PROPOSED
+
+      IN -> DB : ROLLBACK
+      IN --> API : Decisión ya no permitida
+      API --> WEB : HTTP 409
+      WEB --> U : Actualizar propuesta
+
+    else Propuesta pendiente
+
+      ' ====================================
+      ' RECHAZO TOTAL
+      ' ====================================
+
+      alt Rechazo total
+
+        IN -> IN : Validar motivo obligatorio
+
+        alt Motivo vacío o inválido
+
+          IN -> DB : ROLLBACK
+          IN --> API : Error de validación
+          API --> WEB : HTTP 422
+          WEB --> U : Solicitar motivo de rechazo
+
+        else Motivo válido
+
+          IN -> DB : Registrar estado REJECTED,\nmotivo, usuario y fecha
+
+          IN -> DB : Guardar resultado idempotente
+
+          alt Error de persistencia
+
+            DB --> IN : Operación fallida
+            IN -> DB : ROLLBACK
+            IN --> API : Rechazo no confirmado
+            API --> WEB : Error de operación
+            WEB --> U : No mostrar éxito
+
+          else Escrituras correctas
+
+            DB --> IN : Rechazo registrado
+            IN -> DB : COMMIT
+            DB --> IN : Confirmación persistida
+
+            IN --> API : Propuesta REJECTED
+            API --> WEB : HTTP 200 + rechazo registrado
+            WEB --> U : Mostrar propuesta rechazada
+
+            IN ->> EV : PropuestaRechazada
+
+          end
+
+        end
+
+      ' ====================================
+      ' CONFIRMACIÓN O REDUCCIÓN
+      ' ====================================
+
+      else Confirmación completa o reducción
+
+        IN -> IN : Validar cantidades por línea
+
+        note over IN
+          Cada cantidad confirmada:
+          0 <= confirmada <= propuesta.
+
+          Al menos una línea
+          debe ser positiva.
+
+          Una respuesta totalmente
+          en cero equivale a rechazo
+          y requiere motivo.
+        end note
+
+        alt Cantidades inválidas
+
+          IN -> DB : ROLLBACK
+          IN --> API : Errores por campo
+          API --> WEB : HTTP 422
+          WEB --> U : Corregir cantidades
+
+        else Cantidades admisibles
+
+          ' ================================
+          ' REVALIDACIÓN DE VIGENCIA
+          ' ================================
+
+          IN -> DB : Revalidar lotes utilizables,\nstock disponible y propuestas vigentes
+
+          DB --> IN : Disponibilidad actual
+
+          IN -> SH : Verificar necesidad y\ncobertura actual de la solicitud
+          SH --> IN : Demanda todavía elegible
+
+          alt Stock insuficiente o propuesta obsoleta
+
+            IN -> DB : ROLLBACK
+            IN --> API : Conflicto de vigencia
+            API --> WEB : HTTP 409
+            WEB --> U : Actualizar propuesta\ny revisar cantidades
+
+          else Condiciones todavía válidas
+
+            ' ==============================
+            ' PERSISTENCIA DE DECISIÓN
+            ' ==============================
+
+            IN -> DB : Guardar CONFIRMED y\ncantidades confirmadas por línea
+
+            IN -> DB : Registrar responsable, fecha\ny resultado idempotente
+
+            alt Error de persistencia
+
+              DB --> IN : Operación fallida
+              IN -> DB : ROLLBACK
+              IN --> API : Confirmación no persistida
+              API --> WEB : Error de operación
+              WEB --> U : No mostrar éxito
+
+            else Escrituras correctas
+
+              DB --> IN : Decisión registrada
+              IN -> DB : COMMIT
+              DB --> IN : Confirmación persistida
+
+              IN --> API : CONFIRMED y cantidades aceptadas
+              API --> WEB : HTTP 200 + aporte confirmado
+
+              WEB --> U : Mostrar cantidades confirmadas\ny pendientes de autorización
+
+              IN ->> EV : PropuestaConfirmada
+
+              note over IN, EV
+                Una reducción deja cantidades
+                no aceptadas que pueden volver
+                a evaluarse para matching.
+
+                La confirmación no reserva
+                ni descuenta existencias.
+              end note
+
+            end
+
+          end
+
+        end
+
+      end
+
+    end
+
+  end
+
+end
+
+' ==========================================
+' EVENTOS POSTERIORES
+' ==========================================
+
+note over IN, EV
+  Los eventos se procesan después
+  de persistir la decisión.
+
+  El matching puede reevaluar
+  necesidades sin compromiso
+  tras rechazo o reducción.
+
+  La entrega de eventos debe ser
+  recuperable ante fallos.
+
+  El procesamiento asíncrono no debe
+  crear compromisos automáticamente.
+end note
+
+' ==========================================
+' POSCONDICIÓN
+' ==========================================
+
+note over IN, DB
+  Una decisión exitosa conserva:
+
+  - Propuesta CONFIRMED o REJECTED.
+  - Cantidades aceptadas por línea.
+  - Motivo obligatorio si se rechaza.
+  - Responsable y fecha del servidor.
+  - Protección contra duplicados.
+
+  No se crean autorizaciones,
+  despachos ni descuentos físicos.
+
+  La salida solo se autoriza
+  posteriormente mediante CU-ONG-06.
+end note
+
+@enduml

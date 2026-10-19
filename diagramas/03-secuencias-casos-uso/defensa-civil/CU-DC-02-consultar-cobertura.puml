@@ -1,0 +1,189 @@
+
+@startuml
+title CU-DC-02 | Consultar avance de atención y brechas — Alivía
+
+hide footbox
+autonumber
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 160
+skinparam BoxPadding 12
+
+' ==========================================
+' PARTICIPANTES
+' ==========================================
+
+actor "Jefe de\nDefensa Civil" as U
+boundary "Frontend\nNext.js" as WEB
+control "API\nNestJS" as API
+control "Identity" as ID
+control "Consulta de\nsupervisión" as CO
+control "Shelter" as SH
+control "Logistics" as LO
+database "PostgreSQL" as DB
+
+' ==========================================
+' PRECONDICIÓN
+' ==========================================
+
+note over U, WEB
+  El usuario debe contar con
+  una sesión válida y el rol
+  defensaCivil.
+
+  La consulta permite supervisar
+  solicitudes, atención y brechas
+  sin modificar información.
+end note
+
+' ==========================================
+' CONSULTA DE ATENCIÓN
+' ==========================================
+
+U -> WEB : Consultar avance y brechas\npor zona o producto
+
+WEB -> API : GET /v1/supervision/coverage
+
+note right of WEB
+  Filtros de consulta:
+  zona, comunidad y producto.
+end note
+
+API -> ID : Validar sesión y rol defensaCivil
+
+' ==========================================
+' CONTROL DE ACCESO
+' ==========================================
+
+alt Sesión ausente, inválida o expirada
+
+  ID --> API : Autenticación inválida
+  API --> WEB : HTTP 401
+  WEB --> U : Solicitar autenticación
+
+else Rol diferente de defensaCivil
+
+  ID --> API : Acceso denegado
+  API --> WEB : HTTP 403
+  WEB --> U : Mostrar acceso denegado
+
+else Consulta autorizada
+
+  ID --> API : Rol defensaCivil validado
+
+  API -> CO : Consultar avance de atención\ncon filtros autorizados
+
+  ' ========================================
+  ' NECESIDADES Y RECEPCIONES
+  ' ========================================
+
+  CO -> SH : Consultar solicitudes,\nlíneas y recepciones
+
+  SH -> DB : Leer cantidades solicitadas,\nrecibidas y conformes
+
+  DB --> SH : Solicitudes, líneas,\nrecepciones y observaciones
+
+  SH --> CO : Necesidades y resultados\nde recepción por producto
+
+  ' ========================================
+  ' DESPACHOS Y ESTADOS LOGÍSTICOS
+  ' ========================================
+
+  CO -> LO : Consultar despachos vinculados\ny cantidades autorizadas
+
+  LO -> DB : Leer despachos, líneas\ny estados logísticos
+
+  DB --> LO : Despachos y cantidades registradas
+
+  LO --> CO : Autorizaciones vinculadas,\nretiros, llegadas y finalizaciones
+
+  ' ========================================
+  ' VALIDACIÓN DE INFORMACIÓN
+  ' ========================================
+
+  alt Información necesaria no disponible
+
+    CO --> API : Consulta incompleta
+    API --> WEB : Error de consulta
+    WEB --> U : Informar indisponibilidad\nsin inventar cifras
+
+  else Información recuperada
+
+    ' ======================================
+    ' CONSOLIDACIÓN DE COBERTURA
+    ' ======================================
+
+    CO -> CO : Relacionar solicitudes,\nproductos, despachos y recepciones
+
+    CO -> CO : Calcular avance y brechas\nsin duplicar cantidades
+
+    note over CO
+      Distinguir por producto:
+
+      - Cantidad solicitada.
+      - Cantidad sin cobertura.
+      - Cantidad autorizada pendiente.
+      - Cantidad retirada o en traslado.
+      - Llegada pendiente de recepción.
+      - Cantidad recibida conforme.
+      - Faltantes y no conformidades.
+
+      Propuestas no autorizadas
+      no cuentan como compromisos.
+    end note
+
+    ' ======================================
+    ' RESULTADO DE LA CONSULTA
+    ' ======================================
+
+    alt No existen solicitudes para los filtros
+
+      CO --> API : Resultado sin registros
+      API --> WEB : HTTP 200 + resultado vacío
+      WEB --> U : Mostrar ausencia de solicitudes
+
+    else Existen solicitudes y atención registrada
+
+      CO --> API : Cobertura, progreso,\nbrechas y observaciones
+
+      API --> WEB : HTTP 200 + resumen agregado
+
+      WEB --> U : Mostrar avance por zona\ny cantidades por producto
+
+      WEB --> U : Distinguir compromisos,\nentregas conformes y brechas
+
+    end
+
+  end
+
+end
+
+' ==========================================
+' POSCONDICIÓN
+' ==========================================
+
+note over CO, DB
+  La consulta es de solo lectura.
+
+  No modifica solicitudes, despachos,
+  autorizaciones ni inventario.
+
+  La llegada no equivale
+  a recepción conforme.
+
+  Las discrepancias no reactivan
+  automáticamente el matching.
+
+  No se exponen existencias,
+  lotes ni stock privado de las ONG.
+
+  El riesgo territorial se consulta
+  separadamente mediante CU-DC-01.
+end note
+
+@enduml

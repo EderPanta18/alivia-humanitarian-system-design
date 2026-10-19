@@ -1,0 +1,284 @@
+
+@startuml
+title AUT-01 | Matching y recálculo automático — Alivía
+
+hide footbox
+autonumber
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 160
+skinparam BoxPadding 12
+
+' ==========================================
+' PARTICIPANTES
+' ==========================================
+
+queue "Evento interno /\ncola de matching" as EV
+control "Inventory /\nMotor de matching" as IN
+control "Shelter" as SH
+database "PostgreSQL" as DB
+
+' ==========================================
+' PRECONDICIÓN
+' ==========================================
+
+note over EV, IN
+  El matching se ejecuta automáticamente
+  ante cambios relevantes de demanda,
+  inventario o decisiones de ONG.
+
+  La emergencia del escenario
+  está preconfigurada.
+
+  No existe activación manual
+  del matching por un usuario.
+end note
+
+' ==========================================
+' ACTIVACIÓN
+' ==========================================
+
+EV -> IN : SolicitudConfirmada /\nInventarioDisponibleActualizado /\nPropuestaRechazada /\nPropuestaConfirmada con reducción
+
+IN -> IN : Identificar causa y alcance\ndel recálculo
+
+' ==========================================
+' DEMANDA ELEGIBLE
+' ==========================================
+
+IN -> SH : Consultar necesidades elegibles\ndel escenario
+
+SH -> DB : Leer solicitudes confirmadas,\nlíneas, autorizaciones y recepciones
+
+DB --> SH : Cantidades y estados registrados
+
+SH -> SH : Determinar demanda nunca cubierta\nsin duplicar compromisos
+
+note over SH
+  Diferenciar:
+
+  - Cantidad solicitada.
+  - Cobertura ya autorizada.
+  - Cantidad nunca cubierta.
+  - Cantidad recibida conforme.
+  - Discrepancias históricas.
+
+  Las propuestas pendientes no
+  reducen demanda comprometida.
+
+  Los faltantes de recepciones
+  finalizadas no vuelven al matching.
+end note
+
+SH --> IN : Necesidades elegibles por producto
+
+' ==========================================
+' VALIDACIÓN DE DEMANDA
+' ==========================================
+
+alt No existe demanda elegible
+
+  IN --> EV : Ciclo completado sin propuestas
+
+else Existe demanda elegible
+
+  ' ========================================
+  ' CONSULTA DE INVENTARIO
+  ' ========================================
+
+  IN -> DB : Consultar productos, lotes,\nalmacenes y autorizaciones pendientes
+
+  DB --> IN : Existencias y compromisos vigentes
+
+  IN -> IN : Calcular disponibilidad por ONG,\nproducto, almacén y lote
+
+  note over IN
+    Considerar únicamente lotes USABLE.
+
+    Excluir:
+    - BLOCKED.
+    - QUARANTINED.
+    - EXPIRED.
+    - Cantidades ya autorizadas
+      pendientes de retiro.
+
+    No convertir unidades ni sustituir
+    productos por compartir categoría.
+  end note
+
+  ' ========================================
+  ' PRIORIZACIÓN
+  ' ========================================
+
+  IN -> IN : Calcular prioridad de solicitudes
+
+  note over IN
+    Prioridad ponderada:
+
+    50 % criticidad normalizada.
+    30 % población normalizada
+         respecto de 1000 personas.
+    20 % antigüedad normalizada
+         hasta 7 días.
+
+    Desempate:
+    1. Solicitud más antigua.
+    2. UUID ascendente.
+  end note
+
+  ' ========================================
+  ' SELECCIÓN DE PRODUCTOS
+  ' ========================================
+
+  IN -> IN : Ordenar solicitudes por prioridad
+
+  IN -> IN : Seleccionar productos compatibles,\nlotes FEFO y múltiplos de entrega
+
+  note over IN
+    FEFO:
+    priorizar lotes utilizables
+    con vencimiento más próximo.
+
+    Respetar unidades, múltiplos
+    y límites de cantidad elegible.
+
+    Varias ONG pueden contribuir
+    a una misma solicitud.
+  end note
+
+  ' ========================================
+  ' DISTRIBUCIÓN TENTATIVA
+  ' ========================================
+
+  IN -> IN : Distribuir cantidades tentativas\nsin exceder demanda ni oferta
+
+  IN -> IN : Calcular porción propuesta\ny necesidad nunca cubierta restante
+
+  alt No existen candidatos compatibles
+
+    IN --> EV : Ciclo sin nuevas propuestas
+
+    note over IN
+      Se conserva la necesidad
+      nunca cubierta.
+
+      No se inventan aportes
+      ni se modifica inventario.
+    end note
+
+  else Existe cobertura parcial o total
+
+    ' ======================================
+    ' VIGENCIA DE PROPUESTAS
+    ' ======================================
+
+    IN -> DB : Consultar propuestas PROPOSED\nanteriores y decisiones existentes
+
+    DB --> IN : Propuestas y estados vigentes
+
+    IN -> IN : Detectar propuestas pendientes\nque quedaron desactualizadas
+
+    note over IN, DB
+      Las propuestas obsoletas deben
+      dejar de ser confirmables.
+
+      El modelo actual no contempla
+      un estado INVALIDATED.
+
+      El mecanismo para conservar
+      su historial y vigencia operativa
+      requiere definición.
+    end note
+
+    ' ======================================
+    ' PERSISTENCIA DEL RECÁLCULO
+    ' ======================================
+
+    IN -> DB : Iniciar operación transaccional
+
+    IN -> DB : Revalidar demanda, oferta\ny compromisos antes de persistir
+
+    alt Datos modificados durante el cálculo
+
+      DB --> IN : Condiciones desactualizadas
+
+      IN -> DB : ROLLBACK
+
+      IN --> EV : Reintentar con datos vigentes
+
+    else Condiciones consistentes
+
+      DB --> IN : Revalidación correcta
+
+      IN -> DB : Gestionar vigencia de propuestas\nanteriores según política definida
+
+      IN -> DB : Crear matching PROPOSED\npor ONG y solicitud
+
+      IN -> DB : Registrar matching_item,\ncantidades y prioridad
+
+      alt Error de persistencia
+
+        DB --> IN : Escritura fallida
+
+        IN -> DB : ROLLBACK
+
+        IN --> EV : Procesamiento pendiente\nde reintento seguro
+
+      else Propuestas persistidas
+
+        DB --> IN : Propuestas registradas
+
+        IN -> DB : COMMIT
+
+        DB --> IN : Confirmación persistida
+
+        IN --> EV : Propuestas generadas correctamente
+
+        note over IN
+          Las propuestas quedan
+          disponibles para CU-ONG-04.
+
+          La ONG podrá confirmar,
+          reducir o rechazar
+          mediante CU-ONG-05.
+        end note
+
+      end
+
+    end
+
+  end
+
+end
+
+' ==========================================
+' POSCONDICIÓN
+' ==========================================
+
+note over IN, DB
+  Un recálculo exitoso garantiza:
+
+  - Propuestas independientes por ONG.
+  - Productos y cantidades compatibles.
+  - Priorización y selección FEFO.
+  - Demanda nunca cubierta identificada.
+  - Ningún compromiso duplicado.
+  - Reprocesamiento sin propuestas
+    duplicadas para el mismo cálculo.
+
+  Generar propuestas no:
+  - Reserva inventario.
+  - Crea autorizaciones.
+  - Descuenta stock físico.
+  - Reactiva faltantes históricos.
+
+  El compromiso ocurre al autorizar
+  mediante CU-ONG-06.
+end note
+
+@enduml

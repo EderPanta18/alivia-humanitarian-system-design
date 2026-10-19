@@ -1,0 +1,66 @@
+
+@startuml
+title UC-05 | Solicitudes y necesidades — Alivía
+
+left to right direction
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam packageStyle rectangle
+skinparam nodesep 45
+skinparam ranksep 55
+skinparam roundCorner 8
+
+' ==========================================
+' ACTOR
+' ==========================================
+
+actor "Jefe de\nComuna" as COM
+
+' ==========================================
+' CASOS DE USO
+' ==========================================
+
+rectangle "Alivía — Solicitudes y necesidades" {
+
+  usecase "CU-COM-01\nRegistrar solicitud\nde ayuda" as COM01
+
+  usecase "CU-COM-02\nConsultar estado\nde solicitud propia" as COM02
+
+}
+
+' ==========================================
+' ASOCIACIONES
+' ==========================================
+
+COM -- COM01
+COM -- COM02
+
+' ==========================================
+' REGLAS PRINCIPALES
+' ==========================================
+
+legend bottom
+  Reglas funcionales:
+
+  - La comunidad se identifica mediante
+    la sesión y la titularidad se valida
+    en el servidor.
+  - Cada solicitud contiene productos
+    válidos y cantidades positivas.
+  - Las solicitudes confirmadas no pueden
+    editarse ni cancelarse desde Comuna.
+  - Confirmar una solicitud la habilita
+    para matching automático, sin reservar
+    ni descontar inventario.
+  - La consulta distingue cantidades
+    requeridas, sin cobertura,
+    comprometidas y recibidas conformes.
+  - Solo se permite consultar solicitudes
+    pertenecientes a la propia comunidad.
+endlegend
+
+@enduml

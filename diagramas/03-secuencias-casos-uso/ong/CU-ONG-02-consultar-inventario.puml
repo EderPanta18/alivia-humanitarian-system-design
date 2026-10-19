@@ -1,0 +1,164 @@
+
+@startuml
+title CU-ONG-02 | Consultar inventario disponible — Alivía
+
+hide footbox
+autonumber
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 160
+skinparam BoxPadding 12
+
+' ==========================================
+' PARTICIPANTES
+' ==========================================
+
+actor "Jefe de\nONG" as U
+boundary "Frontend\nNext.js" as WEB
+control "API\nNestJS" as API
+control "Identity" as ID
+control "Inventory" as IN
+database "PostgreSQL" as DB
+
+' ==========================================
+' PRECONDICIÓN
+' ==========================================
+
+note over U, WEB
+  El usuario debe tener una sesión
+  válida y estar vinculado a una ONG.
+
+  Solo puede consultar almacenes,
+  lotes y existencias de su
+  propia organización.
+end note
+
+' ==========================================
+' CONSULTA DE INVENTARIO
+' ==========================================
+
+U -> WEB : Abrir inventario de su ONG
+
+WEB -> API : GET /v1/ong/stocks
+
+API -> ID : Validar sesión, rol y ONG vinculada
+
+' ==========================================
+' CONTROL DE ACCESO
+' ==========================================
+
+alt Sesión ausente, inválida o expirada
+
+  ID --> API : Autenticación inválida
+  API --> WEB : HTTP 401
+  WEB --> U : Solicitar autenticación
+
+else Rol ajeno o ONG no vinculada
+
+  ID --> API : Acceso denegado
+  API --> WEB : HTTP 403
+  WEB --> U : Mostrar acceso denegado
+
+else Identidad autorizada
+
+  ID --> API : Usuario y ongId autorizados
+
+  API -> IN : Consultar inventario propio\n(ongId, filtros)
+
+  ' ========================================
+  ' RECUPERACIÓN DE INVENTARIO
+  ' ========================================
+
+  IN -> DB : Leer almacenes, productos,\nlotes y existencias de ongId
+
+  DB --> IN : Inventario y estados de lotes
+
+  IN -> DB : Leer autorizaciones pendientes\nde retiro vinculadas a los lotes
+
+  DB --> IN : Cantidades comprometidas vigentes
+
+  ' ========================================
+  ' CONSOLIDACIÓN
+  ' ========================================
+
+  IN -> IN : Calcular disponibilidad por\nproducto, almacén y lote
+
+  note over IN
+    Para lotes utilizables:
+
+    Disponible = físico
+      - autorizado pendiente de retiro.
+
+    Estados no utilizables:
+    BLOCKED, QUARANTINED, EXPIRED.
+
+    Estos lotes se muestran,
+    pero no ofrecen disponibilidad
+    para nuevas autorizaciones.
+
+    No sumar productos con
+    unidades incompatibles.
+  end note
+
+  ' ========================================
+  ' RESULTADOS
+  ' ========================================
+
+  alt Error de consulta o datos inconsistentes
+
+    IN --> API : Consulta no completada
+    API --> WEB : Error de consulta
+    WEB --> U : No mostrar saldos incorrectos
+
+  else Inventario consultado correctamente
+
+    alt No existen lotes propios
+
+      IN --> API : Inventario vacío
+      API --> WEB : HTTP 200 + lista vacía
+      WEB --> U : Mostrar inventario sin registros
+
+    else Existen lotes propios
+
+      IN --> API : Lotes, estados, cantidades\ny disponibilidad calculada
+
+      API --> WEB : HTTP 200 + inventario propio
+
+      WEB --> U : Mostrar productos, almacenes,\nlotes y vencimientos
+
+      WEB --> U : Mostrar físico, autorizado\npendiente y disponible
+
+    end
+
+  end
+
+end
+
+' ==========================================
+' POSCONDICIÓN
+' ==========================================
+
+note over IN, DB
+  La consulta es de solo lectura.
+
+  No modifica existencias,
+  movimientos ni autorizaciones.
+
+  Las propuestas de matching
+  no se descuentan del disponible.
+
+  Solo las autorizaciones vigentes
+  pendientes de retiro comprometen
+  existencias para nuevas asignaciones.
+
+  El retiro completo confirmado
+  descuenta el inventario físico
+  mediante CU-BRI-04.
+end note
+
+@enduml

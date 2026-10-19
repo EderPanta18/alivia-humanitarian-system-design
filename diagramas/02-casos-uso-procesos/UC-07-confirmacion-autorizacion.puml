@@ -1,0 +1,76 @@
+
+@startuml
+title UC-07 | Decisión y autorización de ONG — Alivía
+
+left to right direction
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam packageStyle rectangle
+skinparam nodesep 45
+skinparam ranksep 55
+skinparam roundCorner 8
+
+' ==========================================
+' ACTOR
+' ==========================================
+
+actor "Jefe de\nONG" as ONG
+
+' ==========================================
+' CASOS DE USO
+' ==========================================
+
+rectangle "Alivía — Decisión y autorización de aportes" {
+
+  usecase "CU-ONG-04\nRevisar propuesta\nde matching" as ONG04
+
+  usecase "CU-ONG-05\nConfirmar, reducir o\nrechazar propuesta" as ONG05
+
+  usecase "CU-ONG-06\nAutorizar salida\nde productos" as ONG06
+
+}
+
+' ==========================================
+' ASOCIACIONES
+' ==========================================
+
+ONG -- ONG04
+ONG -- ONG05
+ONG -- ONG06
+
+' ==========================================
+' REGLAS PRINCIPALES
+' ==========================================
+
+legend bottom
+  Reglas funcionales:
+
+  - La ONG solo puede revisar y decidir
+    sobre propuestas propias y vigentes.
+  - Puede confirmar o reducir cantidades,
+    sin superar las cantidades propuestas.
+  - El rechazo total requiere un motivo.
+  - Las cantidades no aceptadas permanecen
+    pendientes de cobertura.
+  - Confirmar un aporte no autoriza
+    automáticamente su salida.
+  - La autorización requiere cantidades
+    previamente confirmadas y vigentes.
+  - Al autorizar se revalidan de forma
+    atómica el inventario, la titularidad
+    y la cobertura de la solicitud.
+  - La autorización compromete existencias
+    y habilita el despacho, sin descontar
+    todavía el inventario físico.
+  - El descuento físico ocurre tras
+    el retiro completo confirmado
+    por Brigada.
+  - Los reintentos no generan
+    compromisos duplicados.
+endlegend
+
+@enduml

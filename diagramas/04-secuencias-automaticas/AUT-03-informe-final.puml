@@ -1,0 +1,300 @@
+
+@startuml
+title AUT-03 | Evento de cierre e informe final — Alivía
+
+hide footbox
+autonumber
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 160
+skinparam BoxPadding 12
+
+' ==========================================
+' PARTICIPANTES
+' ==========================================
+
+queue "Cola /\nevento interno" as EV
+control "Consolidación de\ninforme final" as FI
+control "Shelter" as SH
+control "Inventory" as IN
+control "Logistics" as LO
+control "Territory" as TE
+database "PostgreSQL" as DB
+
+' ==========================================
+' PRECONDICIÓN
+' ==========================================
+
+note over EV, FI
+  El cierre procede únicamente
+  del evento preconfigurado
+  EMERGENCIA_FINALIZADA.
+
+  No existe una operación pública
+  para finalizar emergencias.
+
+  El informe se publica una sola vez
+  por evento de cierre.
+end note
+
+' ==========================================
+' RECEPCIÓN DEL EVENTO
+' ==========================================
+
+EV -> FI : EMERGENCIA_FINALIZADA\n(evento, escenario, fecha de corte)
+
+FI -> FI : Validar identidad, procedencia\ny escenario del evento
+
+alt Evento no reconocido o no aplicable
+
+  FI --> EV : Rechazar sin publicar informe
+
+else Evento de cierre válido
+
+  ' ========================================
+  ' VERIFICACIÓN DE IDEMPOTENCIA
+  ' ========================================
+
+  FI -> DB : Consultar publicación existente\nasociada al evento de cierre
+
+  DB --> FI : Informe publicado o inexistente
+
+  alt Informe ya publicado
+
+    FI --> EV : Confirmar procesamiento previo
+
+    note over FI
+      El informe existente
+      se conserva sin cambios.
+
+      No se vuelve a consolidar
+      ni se genera otra versión.
+    end note
+
+  else Informe aún no publicado
+
+    ' ======================================
+    ' FECHA DE CORTE
+    ' ======================================
+
+    FI -> FI : Establecer fecha de corte\nasociada al evento
+
+    note over FI
+      El informe representa
+      la situación al cierre.
+
+      Los datos posteriores
+      no deben alterar el contenido
+      una vez publicado.
+    end note
+
+    ' ======================================
+    ' SOLICITUDES Y RECEPCIONES
+    ' ======================================
+
+    FI -> SH : Obtener necesidades, solicitudes,\nrecepciones e incidencias al corte
+
+    SH -> DB : Leer solicitudes, líneas,\nrecepciones y discrepancias
+
+    DB --> SH : Datos humanitarios registrados
+
+    SH --> FI : Cantidades solicitadas,\nrecibidas y conformes
+
+    ' ======================================
+    ' AUTORIZACIONES
+    ' ======================================
+
+    FI -> IN : Obtener aportes confirmados\ny autorizaciones al corte
+
+    IN -> DB : Leer matching, líneas\ny autorizaciones registradas
+
+    DB --> IN : Compromisos y responsables
+
+    IN --> FI : Cantidades autorizadas\ny trazabilidad de decisiones
+
+    ' ======================================
+    ' DESPACHOS
+    ' ======================================
+
+    FI -> LO : Obtener despachos y estados\nlogísticos al corte
+
+    LO -> DB : Leer despachos, líneas,\nretiros y llegadas
+
+    DB --> LO : Cantidades y estados registrados
+
+    LO --> FI : Despachos, movimientos logísticos\ny responsables
+
+    ' ======================================
+    ' CONTEXTO TERRITORIAL
+    ' ======================================
+
+    FI -> TE : Obtener evaluaciones territoriales\ndisponibles hasta el corte
+
+    TE -> DB : Leer evaluaciones, fuentes\ny fechas de valoración
+
+    DB --> TE : Historial territorial disponible
+
+    TE --> FI : Evaluaciones existentes\no ausencia de información
+
+    note over FI, TE
+      Las evaluaciones territoriales
+      aportan contexto cuando existen.
+
+      No se infiere nivel de riesgo
+      por el volumen de ayuda.
+
+      No se inventan evaluaciones
+      ni observaciones externas.
+    end note
+
+    ' ======================================
+    ' CONSOLIDACIÓN
+    ' ======================================
+
+    FI -> FI : Relacionar solicitudes,\nautorizaciones, despachos y recepciones
+
+    FI -> FI : Calcular cobertura, brechas\ne incidencias sin duplicidades
+
+    note over FI
+      Distinguir:
+
+      - Cantidades solicitadas.
+      - Cantidades autorizadas.
+      - Despachos pendientes de retiro.
+      - Cantidades retiradas.
+      - Llegadas pendientes de recepción.
+      - Recepciones conformes.
+      - Faltantes y observaciones.
+      - Necesidades nunca cubiertas.
+
+      Una llegada no equivale
+      a recepción conforme.
+
+      Los faltantes históricos no
+      regresan automáticamente
+      al matching.
+    end note
+
+    FI -> FI : Construir trazabilidad\ncronológica de acciones y responsables
+
+    ' ======================================
+    ' VALIDACIÓN DEL CONSOLIDADO
+    ' ======================================
+
+    alt Información obligatoria no recuperable
+
+      FI --> EV : Fallo recuperable de consolidación
+
+      note over FI
+        No publicar un informe
+        incompleto como definitivo.
+
+        Permitir reintento seguro
+        conservando el mismo evento
+        y la misma fecha de corte.
+      end note
+
+    else Consolidado válido
+
+      ' ====================================
+      ' PUBLICACIÓN ÚNICA
+      ' ====================================
+
+      FI -> DB : Iniciar operación transaccional
+
+      FI -> DB : Comprobar exclusividad de\npublicación por evento
+
+      alt Otra ejecución publicó el informe
+
+        DB --> FI : Publicación previa confirmada
+
+        FI -> DB : Finalizar sin nuevos cambios
+
+        FI --> EV : Confirmar resultado existente
+
+      else Publicación todavía disponible
+
+        FI -> DB : Persistir contenido congelado,\nfecha de corte y trazabilidad
+
+        FI -> DB : Registrar publicación única\nasociada al evento
+
+        alt Error de persistencia
+
+          DB --> FI : Operación fallida
+
+          FI -> DB : ROLLBACK
+
+          FI --> EV : Publicación no confirmada;\npermitir reintento seguro
+
+        else Escrituras correctas
+
+          DB --> FI : Informe preparado
+
+          FI -> DB : COMMIT
+
+          alt Commit confirmado
+
+            DB --> FI : Informe publicado
+
+            FI --> EV : Evento procesado correctamente
+
+            note over FI, DB
+              El informe queda disponible
+              para CU-DC-03.
+
+              La consulta posterior
+              solo recupera el contenido
+              publicado e inmutable.
+            end note
+
+          else Resultado de commit incierto
+
+            DB --> FI : Confirmación no verificable
+
+            FI --> EV : Verificar publicación antes\nde cualquier reintento
+
+          end
+
+        end
+
+      end
+
+    end
+
+  end
+
+end
+
+' ==========================================
+' POSCONDICIÓN
+' ==========================================
+
+note over FI, DB
+  Un cierre procesado correctamente
+  conserva un informe único,
+  fechado e inmutable por evento.
+
+  Su contenido permite reconstruir:
+  solicitud, autorización, retiro,
+  llegada, recepción y discrepancias.
+
+  No se publica durante
+  la emergencia activa.
+
+  No modifica retrospectivamente
+  solicitudes ni operaciones.
+
+  No permite a Defensa Civil
+  declarar, cerrar o reabrir
+  una emergencia.
+
+  CU-DC-03 consulta únicamente
+  informes previamente publicados.
+end note
+
+@enduml

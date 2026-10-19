@@ -1,0 +1,274 @@
+
+@startuml
+!pragma layout smetana
+
+title EST-02 | Paquetes y contratos modulares — Alivía
+
+left to right direction
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam monochrome true
+skinparam linetype ortho
+skinparam packageStyle rectangle
+skinparam componentStyle rectangle
+skinparam wrapWidth 200
+
+' ==========================================
+' FRONTEND
+' ==========================================
+
+package "Frontend web - Next.js" as FE {
+
+  [Interfaz por rol] as UI
+  [Cliente HTTP] as CLIENT
+
+  UI --> CLIENT : solicitudes autorizadas
+
+}
+
+' ==========================================
+' BACKEND
+' ==========================================
+
+package "Backend - Monolito modular NestJS" as BACK {
+
+  ' ========================================
+  ' PUNTOS DE ENTRADA
+  ' ========================================
+
+  package "Entradas de aplicación" as ENTRY {
+
+    [API HTTP] as HTTP
+
+    [Procesador de eventos\ninternos] as WORKER
+
+  }
+
+  ' ========================================
+  ' ORQUESTACIÓN
+  ' ========================================
+
+  package "Orquestación de aplicación" as APP {
+
+    [Casos de uso operativos] as UC
+
+    [Consultas de supervisión] as SUP
+
+    [Consolidación de\ninforme final] as REPORT
+
+  }
+
+  ' ========================================
+  ' MÓDULOS FUNCIONALES
+  ' ========================================
+
+  package "Identity" as ID {
+
+    [Autenticación,\nroles y titularidad] as IDA
+
+  }
+
+  package "Shelter" as SH {
+
+    [Comunidades y solicitudes] as REQUESTS
+
+    [Recepciones y discrepancias] as RECEIPTS
+
+  }
+
+  package "Inventory" as IN {
+
+    [Catálogo e inventario] as STOCK
+
+    [Matching y propuestas] as MATCH
+
+    [Decisiones y autorizaciones] as AUTH
+
+  }
+
+  package "Logistics" as LO {
+
+    [Despachos y retiros] as DISPATCH
+
+    [Rutas y estado vial] as ROUTES
+
+    [Documentos de entrega] as DOCS
+
+  }
+
+  package "Territory" as TE {
+
+    [Evaluaciones de riesgo] as RISK
+
+    [Integración de\nobservaciones externas] as OBS
+
+  }
+
+}
+
+' ==========================================
+' SISTEMAS EXTERNOS
+' ==========================================
+
+queue "Eventos internos /\nprocesos programados" as EVENTS
+
+cloud "Fuentes externas\nconfiguradas" as SOURCES
+
+database "PostgreSQL\n(schemas por módulo)" as DB
+
+' ==========================================
+' COMUNICACIÓN FRONTEND - BACKEND
+' ==========================================
+
+CLIENT --> HTTP : HTTPS / REST
+
+' ==========================================
+' PUNTOS DE ENTRADA
+' ==========================================
+
+HTTP --> UC : comandos y consultas operativas
+
+HTTP --> SUP : consultas de Defensa Civil
+
+EVENTS --> WORKER : eventos habilitados
+
+WORKER --> UC : procesos operativos automáticos
+
+WORKER --> REPORT : EMERGENCIA_FINALIZADA
+
+' ==========================================
+' CONTRATOS DE APLICACIÓN
+' ==========================================
+
+UC ..> IDA : identidad y permisos
+
+UC ..> REQUESTS : solicitudes
+
+UC ..> RECEIPTS : recepciones
+
+UC ..> STOCK : existencias
+
+UC ..> MATCH : propuestas
+
+UC ..> AUTH : decisiones y autorizaciones
+
+UC ..> DISPATCH : despachos y retiros
+
+UC ..> ROUTES : rutas verificadas
+
+UC ..> DOCS : documentos
+
+' ==========================================
+' SUPERVISIÓN DE SOLO LECTURA
+' ==========================================
+
+SUP ..> IDA : acceso autorizado
+
+SUP ..> REQUESTS : necesidades
+
+SUP ..> RECEIPTS : entregas conformes
+
+SUP ..> DISPATCH : avance logístico
+
+SUP ..> RISK : evaluaciones territoriales
+
+SUP ..> REPORT : informes publicados
+
+' ==========================================
+' INFORME FINAL
+' ==========================================
+
+REPORT ..> REQUESTS : solicitudes al corte
+
+REPORT ..> RECEIPTS : recepciones e incidencias
+
+REPORT ..> AUTH : decisiones y autorizaciones
+
+REPORT ..> DISPATCH : retiros y llegadas
+
+REPORT ..> RISK : contexto territorial disponible
+
+' ==========================================
+' INTEGRACIÓN EXTERNA
+' ==========================================
+
+OBS ..> SOURCES : consulta controlada
+
+WORKER ..> OBS : ingesta programada
+
+' ==========================================
+' PERSISTENCIA
+' ==========================================
+
+IDA ..> DB : identity
+
+REQUESTS ..> DB : shelter
+
+STOCK ..> DB : inventory
+
+DISPATCH ..> DB : logistics
+
+RISK ..> DB : territory
+
+' ==========================================
+' RESTRICCIONES
+' ==========================================
+
+note bottom of APP
+  La orquestación coordina
+  operaciones entre módulos
+  mediante contratos públicos.
+
+  No accede directamente
+  a repositorios internos
+  ni entidades ORM ajenas.
+
+  La consolidación final es
+  una responsabilidad lógica;
+  su propietario de persistencia
+  todavía debe definirse.
+end note
+
+note bottom of SUP
+  Defensa Civil solo consulta.
+
+  No modifica solicitudes,
+  inventario, despachos
+  ni evaluaciones de riesgo.
+
+  No expone existencias
+  privadas de las ONG.
+end note
+
+note bottom of DB
+  Cada módulo es propietario
+  de su schema PostgreSQL.
+
+  Las referencias entre schemas
+  son lógicas y se resuelven
+  mediante contratos.
+
+  El almacenamiento del informe
+  final todavía está pendiente
+  de definición.
+end note
+
+note bottom of BACK
+  Los paquetes representan
+  responsabilidades lógicas,
+  no una estructura obligatoria
+  de directorios.
+
+  Las dependencias de código
+  deben evitar ciclos.
+
+  Los eventos internos pueden
+  coordinar operaciones, pero
+  no garantizan por sí mismos
+  transacciones distribuidas.
+end note
+
+@enduml

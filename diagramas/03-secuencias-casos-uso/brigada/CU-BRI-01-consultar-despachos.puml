@@ -1,0 +1,108 @@
+
+@startuml
+title CU-BRI-01 | Consultar despachos autorizados — Alivía
+
+hide footbox
+autonumber
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 160
+skinparam BoxPadding 12
+
+' ==========================================
+' PARTICIPANTES
+' ==========================================
+
+actor "Jefe de\nBrigada" as U
+boundary "Frontend\nNext.js" as WEB
+control "API\nNestJS" as API
+control "Identity" as ID
+control "Logistics" as LO
+database "PostgreSQL" as DB
+
+' ==========================================
+' PRECONDICIÓN
+' ==========================================
+
+note over U, WEB
+  El usuario accede a la consulta
+  de despachos desde su sesión.
+  La API debe validar su identidad,
+  rol y vinculación con una brigada.
+end note
+
+' ==========================================
+' SOLICITUD
+' ==========================================
+
+U -> WEB : Abrir despachos autorizados
+WEB -> API : GET /v1/brigade/dispatches
+note right of WEB
+  Petición autenticada mediante
+  el proxy interno de Next.js.
+end note
+
+API -> ID : Validar sesión, rol y brigada vinculada
+
+' ==========================================
+' CONTROL DE ACCESO
+' ==========================================
+
+alt Sesión ausente, inválida o expirada
+
+  ID --> API : Autenticación inválida
+  API --> WEB : HTTP 401
+  WEB --> U : Solicitar autenticación
+
+else Rol ajeno o brigada no vinculada
+
+  ID --> API : Acceso no autorizado
+  API --> WEB : HTTP 403
+  WEB --> U : Mostrar acceso denegado
+
+else Acceso autorizado
+
+  ID --> API : Contexto autorizado (brigadeId)
+
+  ' ========================================
+  ' CONSULTA OPERATIVA
+  ' ========================================
+
+  API -> LO : Listar despachos de brigadeId
+
+  LO -> DB : Consultar despachos autorizados\nasignados a brigadeId
+  DB --> LO : Despachos y líneas autorizadas
+
+  LO --> API : Resultado filtrado por brigada
+
+  alt Existen despachos
+
+    API --> WEB : HTTP 200 + lista de despachos
+    WEB --> U : Mostrar origen, destino,\nproductos, cantidades y estados
+
+  else No existen despachos autorizados
+
+    API --> WEB : HTTP 200 + lista vacía
+    WEB --> U : Mostrar estado sin despachos
+
+  end
+
+end
+
+' ==========================================
+' POSCONDICIÓN
+' ==========================================
+
+note over U, WEB
+  Consulta de solo lectura.
+
+  No modifica despachos ni inventario.
+  No expone despachos de otras brigadas.
+end note
+
+@enduml

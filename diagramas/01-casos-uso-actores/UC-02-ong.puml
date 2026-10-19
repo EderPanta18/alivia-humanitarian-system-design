@@ -1,0 +1,83 @@
+
+@startuml
+title UC-02 | Casos de uso del Jefe de ONG — Alivía
+
+left to right direction
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam packageStyle rectangle
+skinparam nodesep 45
+skinparam ranksep 55
+skinparam roundCorner 8
+
+' ==========================================
+' ACTOR
+' ==========================================
+
+actor "Jefe de\nONG" as ONG
+
+' ==========================================
+' CASOS DE USO
+' ==========================================
+
+rectangle "Alivía — Inventario y aportes de ONG" {
+
+  usecase "CU-ONG-01\nRegistrar ingreso\nde donaciones" as ONG01
+
+  usecase "CU-ONG-02\nConsultar inventario\ndisponible" as ONG02
+
+  usecase "CU-ONG-03\nRegistrar ajuste\nde inventario" as ONG03
+
+  usecase "CU-ONG-04\nRevisar propuesta\nde matching" as ONG04
+
+  usecase "CU-ONG-05\nConfirmar, reducir o\nrechazar propuesta" as ONG05
+
+  usecase "CU-ONG-06\nAutorizar salida\nde productos" as ONG06
+
+}
+
+' ==========================================
+' ASOCIACIONES
+' ==========================================
+
+ONG -- ONG01
+ONG -- ONG02
+ONG -- ONG03
+ONG -- ONG04
+ONG -- ONG05
+ONG -- ONG06
+
+' ==========================================
+' REGLAS PRINCIPALES
+' ==========================================
+
+legend bottom
+  Reglas funcionales:
+
+  - La ONG solo administra sus propios
+    almacenes, inventario y propuestas.
+  - Los ingresos y ajustes son trazables;
+    no se permiten existencias negativas
+    ni vulnerar compromisos autorizados.
+  - Los lotes vencidos o bloqueados
+    no cuentan como stock utilizable.
+  - El matching propone aportes,
+    pero no reserva ni descuenta stock.
+  - La ONG puede confirmar, reducir
+    o rechazar una propuesta. El rechazo
+    total requiere un motivo.
+  - Confirmar un aporte no autoriza
+    automáticamente su salida.
+  - Autorizar revalida disponibilidad
+    y cobertura; compromete existencias,
+    pero no descuenta el inventario físico.
+  - El descuento físico ocurre únicamente
+    tras el retiro completo confirmado
+    por Brigada, sin duplicarse por reintentos.
+endlegend
+
+@enduml

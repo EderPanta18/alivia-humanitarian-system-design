@@ -1,0 +1,191 @@
+
+@startuml
+title UC-00 | Diagrama general de casos de uso de Alivía
+
+left to right direction
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam packageStyle rectangle
+skinparam nodesep 35
+skinparam ranksep 45
+skinparam roundCorner 8
+
+' ==========================================
+' ACTORES
+' ==========================================
+
+actor "Jefe de\nComuna" as COM
+actor "Jefe de\nONG" as ONG
+actor "Jefe de\nBrigada" as BRI
+actor "Jefe de\nDefensa Civil" as DC
+
+' Sistema externo secundario, sin rol humano.
+actor "Fuente externa\nde información" as EXT
+
+' ==========================================
+' LÍMITE DEL SISTEMA
+' ==========================================
+
+rectangle "Alivía — Plataforma de coordinación de ayuda humanitaria" {
+
+  ' ----------------------------------------
+  ' COMUNA
+  ' ----------------------------------------
+
+  package "Solicitudes y recepción" {
+
+    usecase "CU-COM-01\nRegistrar solicitud\nde ayuda" as COM01
+
+    usecase "CU-COM-02\nConsultar estado\nde solicitud" as COM02
+
+    usecase "CU-COM-03\nConfirmar recepción\nde ayuda" as COM03
+
+    usecase "CU-COM-04\nRegistrar recepción\ncon discrepancias" as COM04
+
+  }
+
+  ' ----------------------------------------
+  ' ONG
+  ' ----------------------------------------
+
+  package "Inventario y aportes de ONG" {
+
+    usecase "CU-ONG-01\nRegistrar ingreso\nde donaciones" as ONG01
+
+    usecase "CU-ONG-02\nConsultar inventario\ndisponible" as ONG02
+
+    usecase "CU-ONG-03\nRegistrar ajuste\nde inventario" as ONG03
+
+    usecase "CU-ONG-04\nRevisar propuesta\nde matching" as ONG04
+
+    usecase "CU-ONG-05\nConfirmar, reducir o\nrechazar propuesta" as ONG05
+
+    usecase "CU-ONG-06\nAutorizar salida\nde productos" as ONG06
+
+  }
+
+  ' ----------------------------------------
+  ' BRIGADA
+  ' ----------------------------------------
+
+  package "Despachos y rutas" {
+
+    usecase "CU-BRI-01\nConsultar despachos\nautorizados" as BRI01
+
+    usecase "CU-BRI-02\nConsultar ruta\nde despacho" as BRI02
+
+    usecase "CU-BRI-03\nRegistrar llegada\nal destino" as BRI03
+
+    usecase "CU-BRI-04\nVerificar y confirmar\nretiro completo" as BRI04
+
+    usecase "Comprobar ruta\ndisponible y vigente" as RUTA
+
+  }
+
+  ' ----------------------------------------
+  ' DEFENSA CIVIL
+  ' ----------------------------------------
+
+  package "Supervisión territorial" {
+
+    usecase "CU-DC-01\nConsultar riesgo territorial\ny alertas recientes" as DC01
+
+    usecase "CU-DC-02\nConsultar avance de\natención y brechas" as DC02
+
+    usecase "CU-DC-03\nConsultar informe\nfinal publicado" as DC03
+
+  }
+
+  ' ----------------------------------------
+  ' INTEGRACIÓN EXTERNA
+  ' ----------------------------------------
+
+  package "Integración externa" {
+
+    usecase "Incorporar observaciones\ny alertas externas" as INGESTA
+
+  }
+
+}
+
+' ==========================================
+' ASOCIACIONES
+' ==========================================
+
+' Jefe de Comuna
+COM -- COM01
+COM -- COM02
+COM -- COM03
+
+' Jefe de ONG
+ONG -- ONG01
+ONG -- ONG02
+ONG -- ONG03
+ONG -- ONG04
+ONG -- ONG05
+ONG -- ONG06
+
+' Jefe de Brigada
+BRI -- BRI01
+BRI -- BRI02
+BRI -- BRI03
+BRI -- BRI04
+
+' Jefe de Defensa Civil
+DC -- DC01
+DC -- DC02
+DC -- DC03
+
+' Sistema externo
+EXT -- INGESTA
+
+' ==========================================
+' RELACIONES UML
+' ==========================================
+
+' La recepción discrepante es una variante
+' condicional de la confirmación de recepción.
+COM04 ..> COM03 : <<extend>>
+
+' La comprobación de ruta es obligatoria
+' antes de confirmar el retiro completo.
+BRI04 ..> RUTA : <<include>>
+
+' ==========================================
+' REGLAS PRINCIPALES
+' ==========================================
+
+legend bottom
+  Reglas funcionales:
+
+  - Cada rol opera únicamente los recursos
+    que le corresponden.
+  - Las solicitudes confirmadas habilitan
+    el matching automático, sin reservar stock.
+  - Las propuestas requieren decisión de ONG.
+    La autorización posterior compromete
+    existencias, pero no las descuenta.
+  - El retiro completo requiere ruta AVAILABLE,
+    verificada hace menos de 30 minutos,
+    sin tramos UNKNOWN o IMPASSABLE.
+  - El retiro confirmado descuenta inventario
+    físico una sola vez.
+  - Registrar llegada no confirma recepción.
+    Las discrepancias no reactivan el matching.
+  - Tras finalizar la recepción se generan
+    el manifiesto XLSX y el acta PDF;
+    un fallo documental no revierte la recepción.
+  - Defensa Civil consulta riesgos, alertas
+    recientes, atención y brechas en solo lectura.
+  - Las alertas externas son informativas;
+    no declaran emergencias automáticamente.
+  - El informe final se publica únicamente
+    tras procesar EMERGENCIA_FINALIZADA.
+    Es único e inmutable por emergencia.
+endlegend
+
+@enduml

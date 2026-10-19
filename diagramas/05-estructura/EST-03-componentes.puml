@@ -1,0 +1,263 @@
+
+@startuml
+!pragma layout smetana
+
+title EST-03 | Componentes y colaboraciones — Alivía
+
+left to right direction
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam monochrome true
+skinparam linetype ortho
+skinparam componentStyle uml2
+skinparam packageStyle rectangle
+skinparam wrapWidth 200
+skinparam nodesep 35
+skinparam ranksep 45
+
+' ==========================================
+' ACTORES Y FRONTEND
+' ==========================================
+
+actor "Usuario autorizado" as USER
+
+node "Navegador" as BROWSER {
+  component "Frontend Next.js\nInterfaz por rol" as FE
+}
+
+' ==========================================
+' BACKEND MODULAR
+' ==========================================
+
+package "Backend NestJS - Monolito modular" as BACK {
+
+  ' ========================================
+  ' PUNTOS DE ENTRADA
+  ' ========================================
+
+  package "Entradas" {
+
+    component "API HTTP\nGuardas y validación" as API
+
+    component "Procesador de eventos\ny trabajos internos" as WORKER
+
+  }
+
+  ' ========================================
+  ' APLICACIÓN
+  ' ========================================
+
+  package "Aplicación" {
+
+    component "Coordinación de\ncasos de uso" as ORQ
+
+    component "Consulta de supervisión\nSolo lectura" as READ
+
+    component "Consolidación de\ninforme final" as REPORT
+
+  }
+
+  ' ========================================
+  ' MÓDULOS FUNCIONALES
+  ' ========================================
+
+  package "Módulos de dominio" {
+
+    component "Identity" as ID
+
+    component "Shelter" as SH
+
+    component "Inventory" as IN
+
+    component "Logistics" as LO
+
+    component "Territory" as TE
+
+  }
+
+  ' ========================================
+  ' ADAPTADORES EXTERNOS
+  ' ========================================
+
+  package "Adaptadores de integración" {
+
+    component "Adaptador de\nfuentes territoriales" as EXT_DATA
+
+    component "Adaptador de\nrutas" as EXT_ROUTE
+
+  }
+
+}
+
+' ==========================================
+' INFRAESTRUCTURA Y SISTEMAS EXTERNOS
+' ==========================================
+
+database "PostgreSQL\nSchemas por módulo" as DB
+
+queue "Eventos y trabajos\ninternos" as EV
+
+cloud "Fuentes externas\nautorizadas" as SOURCES
+
+cloud "Proveedor de rutas\nconfigurado" as ROUTES
+
+folder "Archivos generados\nExcel / PDF" as FILES
+
+' ==========================================
+' INTERACCIÓN DE USUARIOS
+' ==========================================
+
+USER --> FE : Interacciones por rol
+
+FE --> API : HTTPS / REST
+
+API --> ID : Autenticar y autorizar
+
+API --> ORQ : Comandos operativos
+
+API --> READ : Consultas de supervisión
+
+' ==========================================
+' EJECUCIÓN AUTOMÁTICA
+' ==========================================
+
+EV --> WORKER : Eventos internos\ny tareas programadas
+
+WORKER --> ORQ : Procesos operativos automáticos
+
+WORKER --> REPORT : EMERGENCIA_FINALIZADA
+
+WORKER --> TE : Ingesta territorial habilitada
+
+' ==========================================
+' COORDINACIÓN OPERATIVA
+' ==========================================
+
+ORQ ..> SH : Solicitudes y recepciones
+
+ORQ ..> IN : Inventario, matching\ny autorizaciones
+
+ORQ ..> LO : Despachos, retiros,\nllegadas y documentos
+
+' ==========================================
+' SUPERVISIÓN
+' ==========================================
+
+READ ..> ID : Verificar rol defensaCivil
+
+READ ..> SH : Necesidades y recepciones
+
+READ ..> LO : Estados y cantidades logísticas
+
+READ ..> TE : Evaluaciones territoriales
+
+READ ..> REPORT : Informes publicados
+
+' ==========================================
+' INFORME FINAL
+' ==========================================
+
+REPORT ..> SH : Solicitudes, recepciones\ny discrepancias
+
+REPORT ..> IN : Decisiones y autorizaciones
+
+REPORT ..> LO : Despachos, retiros\ny llegadas
+
+REPORT ..> TE : Riesgo territorial disponible
+
+' ==========================================
+' INTEGRACIONES EXTERNAS
+' ==========================================
+
+TE --> EXT_DATA : Consultar fuentes habilitadas
+
+EXT_DATA --> SOURCES : Consulta controlada
+
+LO --> EXT_ROUTE : Solicitar recorrido
+
+EXT_ROUTE --> ROUTES : Consulta si está configurado
+
+LO --> FILES : Manifiestos Excel\ny actas PDF
+
+' ==========================================
+' PERSISTENCIA POR MÓDULO
+' ==========================================
+
+ID --> DB : Schema identity
+
+SH --> DB : Schema shelter
+
+IN --> DB : Schema inventory
+
+LO --> DB : Schema logistics
+
+TE --> DB : Schema territory
+
+' ==========================================
+' REGLAS DE ARQUITECTURA
+' ==========================================
+
+note bottom of BACK
+  El backend es un monolito modular.
+
+  HTTP y procesamiento de eventos
+  son puntos de entrada lógicos;
+  no se impone un único proceso físico.
+
+  Las operaciones entre módulos
+  utilizan contratos públicos.
+
+  No se accede directamente
+  a repositorios u ORM ajenos.
+
+  Las colaboraciones no deben
+  introducir dependencias cíclicas.
+end note
+
+note bottom of ORQ
+  Coordina operaciones entre módulos.
+
+  No sustituye las reglas de negocio
+  de Inventory, Shelter o Logistics.
+
+  La consistencia transaccional
+  debe garantizarse explícitamente.
+end note
+
+note bottom of READ
+  Defensa Civil solo consulta.
+
+  No modifica inventario,
+  solicitudes ni despachos.
+
+  No accede a existencias
+  o lotes privados de ONG.
+
+  Una llegada no equivale
+  a recepción conforme.
+end note
+
+note bottom of REPORT
+  Genera el consolidado únicamente
+  tras EMERGENCIA_FINALIZADA.
+
+  La publicación es única
+  e inmutable por evento.
+
+  La responsabilidad de persistencia
+  del informe requiere definición.
+end note
+
+note bottom of EV
+  Los eventos activan trabajos internos.
+
+  Su transporte, persistencia
+  y mecanismos de reintento
+  dependen de la infraestructura
+  finalmente implementada.
+end note
+
+@enduml

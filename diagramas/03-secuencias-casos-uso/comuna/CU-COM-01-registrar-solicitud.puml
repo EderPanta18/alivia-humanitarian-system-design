@@ -1,0 +1,202 @@
+
+@startuml
+title CU-COM-01 | Registrar solicitud de ayuda — Alivía
+
+hide footbox
+autonumber
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 160
+skinparam BoxPadding 12
+
+' ==========================================
+' PARTICIPANTES
+' ==========================================
+
+actor "Jefe de\nComuna" as U
+boundary "Frontend\nNext.js" as WEB
+control "API\nNestJS" as API
+control "Identity" as ID
+control "Shelter" as SH
+control "Inventory" as IN
+database "PostgreSQL" as DB
+queue "Evento interno /\ncola de matching" as EV
+
+' ==========================================
+' PRECONDICIÓN
+' ==========================================
+
+note over U, WEB
+  El escenario de emergencia debe
+  estar habilitado para solicitudes.
+
+  La comunidad se determina mediante
+  la identidad autenticada.
+
+  El usuario no selecciona
+  una comunidad ajena.
+end note
+
+' ==========================================
+' REGISTRO DE SOLICITUD
+' ==========================================
+
+U -> WEB : Completar situación, población\nproductos y cantidades
+WEB --> U : Mostrar resumen de solicitud
+U -> WEB : Confirmar y registrar
+
+WEB -> API : POST /v1/requests
+note right of WEB
+  Enviar situación, población,
+  productos, cantidades y
+  clave de idempotencia.
+end note
+
+API -> ID : Validar sesión, rol y comunidad vinculada
+
+' ==========================================
+' CONTROL DE ACCESO
+' ==========================================
+
+alt Sesión ausente, inválida o expirada
+
+  ID --> API : Autenticación inválida
+  API --> WEB : HTTP 401
+  WEB --> U : Solicitar autenticación
+
+else Rol ajeno o comunidad no vinculada
+
+  ID --> API : Acceso denegado
+  API --> WEB : HTTP 403
+  WEB --> U : Mostrar acceso denegado
+
+else Identidad autorizada
+
+  ID --> API : Usuario y communityId autorizados
+
+  API -> SH : Registrar solicitud confirmada
+
+  ' ========================================
+  ' CONTEXTO E IDEMPOTENCIA
+  ' ========================================
+
+  SH -> DB : Verificar contexto habilitado\ny operación previa
+  DB --> SH : Contexto y resultado previo
+
+  alt Reintento idéntico ya confirmado
+
+    SH --> API : Solicitud previamente registrada
+    API --> WEB : Resultado original
+    WEB --> U : Mostrar solicitud existente
+
+  else Clave reutilizada con datos diferentes
+
+    SH --> API : Conflicto de idempotencia
+    API --> WEB : HTTP 409
+    WEB --> U : Rechazar duplicación incompatible
+
+  else Escenario no habilitado
+
+    SH --> API : Operación no permitida
+    API --> WEB : HTTP 409
+    WEB --> U : Informar indisponibilidad del registro
+
+  else Nueva solicitud en escenario habilitado
+
+    ' ======================================
+    ' VALIDACIONES
+    ' ======================================
+
+    SH -> SH : Validar población, situación,\ncantidades y productos no repetidos
+
+    SH -> IN : Validar productos activos,\nidentificadores y unidades
+    IN --> SH : Resultado de validación del catálogo
+
+    alt Datos o productos inválidos
+
+      SH --> API : Errores por campo
+      API --> WEB : HTTP 422
+      WEB --> U : Señalar campos incorrectos
+
+    else Solicitud válida
+
+      ' ====================================
+      ' PERSISTENCIA
+      ' ====================================
+
+      SH -> DB : Iniciar transacción
+
+      SH -> DB : Crear solicitud OPEN,\nlíneas y trazabilidad del autor
+
+      alt Error de persistencia
+
+        DB --> SH : Fallo de escritura
+        SH -> DB : ROLLBACK
+
+        SH --> API : Solicitud no confirmada
+        API --> WEB : Error de operación
+        WEB --> U : No mostrar éxito
+
+      else Persistencia correcta
+
+        DB --> SH : Solicitud y líneas guardadas
+        SH -> DB : COMMIT
+        DB --> SH : Confirmación persistida
+
+        ' ==================================
+        ' RESULTADO DE REGISTRO
+        ' ==================================
+
+        SH --> API : UUID, OPEN y fecha de confirmación
+        API --> WEB : HTTP 201 + solicitud confirmada
+        WEB --> U : Mostrar identificador y estado
+
+        ' ==================================
+        ' PROCESAMIENTO AUTOMÁTICO
+        ' ==================================
+
+        SH ->> EV : SolicitudConfirmada
+
+        note over SH, EV
+          El matching se procesa
+          independientemente de la
+          respuesta de registro.
+
+          Debe garantizarse que una
+          solicitud persistida no pierda
+          su procesamiento pendiente.
+        end note
+
+      end
+
+    end
+
+  end
+
+end
+
+' ==========================================
+' POSCONDICIÓN
+' ==========================================
+
+note over SH, DB
+  Una solicitud confirmada conserva:
+  - Identificador único.
+  - Comunidad obtenida de la sesión.
+  - Autor y fecha de confirmación.
+  - Situación y población afectada.
+  - Productos y cantidades solicitadas.
+  - Estado inicial OPEN.
+
+  No compromete ni descuenta inventario.
+
+  No puede editarse ni cancelarse
+  posteriormente desde Comuna.
+end note
+
+@enduml

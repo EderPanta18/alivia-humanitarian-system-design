@@ -1,0 +1,454 @@
+
+@startuml
+!pragma layout smetana
+
+title EST-01 | Modelo conceptual del dominio — Alivía
+
+left to right direction
+hide empty methods
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam monochrome true
+skinparam linetype ortho
+skinparam classAttributeIconSize 0
+skinparam wrapWidth 220
+skinparam nodesep 35
+skinparam ranksep 45
+
+' ==========================================
+' IDENTIDAD Y TERRITORIO COMUNITARIO
+' ==========================================
+
+package "Actores y territorios" {
+
+  enum Role {
+    defensaCivil
+    comuna
+    brigada
+    ong
+  }
+
+  class Usuario {
+    rol : Role
+    activo : boolean
+  }
+
+  class JefeComuna <<rol>>
+  class JefeONG <<rol>>
+  class JefeBrigada <<rol>>
+  class JefeDefensaCivil <<rol>>
+
+  Usuario <|-- JefeComuna
+  Usuario <|-- JefeONG
+  Usuario <|-- JefeBrigada
+  Usuario <|-- JefeDefensaCivil
+
+  class ONG {
+    nombre
+    activa
+  }
+
+  class Brigada <<conceptual>> {
+    identificador
+  }
+
+  class Distrito {
+    ubigeo
+    nombre
+  }
+
+  class Comunidad {
+    tipo
+    ubicacion
+  }
+
+  class Emergencia <<contexto>> {
+    fechaInicio
+    fechaFin
+  }
+
+}
+
+' ==========================================
+' NECESIDADES E INVENTARIO
+' ==========================================
+
+package "Necesidades y aportes" {
+
+  class Solicitud {
+    estado
+    poblacionAfectada
+    situacion
+    confirmadaEn
+  }
+
+  class LineaSolicitud {
+    cantidadRequerida
+  }
+
+  class CategoriaProducto {
+    nombre
+    criticidad
+  }
+
+  class UnidadMedida {
+    codigo
+    simbolo
+  }
+
+  class Producto {
+    nombre
+    multiploEntrega
+    requiereVencimiento
+  }
+
+  class PropuestaMatching {
+    estado
+    fechaCreacion
+  }
+
+  class LineaPropuesta {
+    cantidadPropuesta
+    cantidadConfirmada
+    prioridadCalculada
+  }
+
+  class Autorizacion {
+    fechaAutorizacion
+    claveOperacion
+  }
+
+  class Almacen {
+    ubicacion
+  }
+
+  class LoteStock {
+    cantidadFisica
+    estado
+    vencimiento
+  }
+
+  class MovimientoStock {
+    tipo
+    variacionCantidad
+    motivo
+    fecha
+  }
+
+}
+
+' ==========================================
+' LOGÍSTICA Y RECEPCIÓN
+' ==========================================
+
+package "Despacho y recepción" {
+
+  class Despacho {
+    estado
+    retiradaEn
+    llegadaEn
+  }
+
+  class LineaDespacho {
+    cantidadAutorizada
+    cantidadRetirada
+  }
+
+  class Ruta {
+    estado
+    calculadaEn
+    verificadaEn
+  }
+
+  class TramoVial {
+    estado
+    fechaActualizacion
+  }
+
+  class SegmentoRuta {
+    secuencia
+  }
+
+  class Recepcion {
+    resultado
+    confirmadaEn
+    observaciones
+  }
+
+  class LineaRecepcion {
+    cantidadRecibida
+    cantidadConforme
+    cantidadFaltante
+  }
+
+  class Discrepancia {
+    descripcion
+    fechaRegistro
+  }
+
+  class Documento {
+    tipo
+    generadoEn
+  }
+
+  class InformeFinal <<conceptual>> {
+    fechaCorte
+  }
+
+}
+
+' ==========================================
+' RIESGO TERRITORIAL
+' ==========================================
+
+package "Riesgo territorial" {
+
+  class Fenomeno {
+    codigo
+    nombre
+  }
+
+  class NivelRiesgo {
+    nombre
+    ordenSeveridad
+    colorMapa
+  }
+
+  class EvaluacionRiesgo {
+    fuente
+    fechaEvaluacion
+    fechaImportacion
+  }
+
+}
+
+' ==========================================
+' RELACIONES DE IDENTIDAD Y TERRITORIO
+' ==========================================
+
+Distrito "1" -- "0..*" Comunidad : contiene
+
+JefeComuna "1" -- "1" Comunidad : dirige
+JefeONG "1" -- "1" ONG : dirige
+JefeBrigada "1" -- "1" Brigada : dirige
+
+' ==========================================
+' RELACIONES DE NECESIDADES
+' ==========================================
+
+Comunidad "1" -- "0..*" Solicitud : origina
+
+Emergencia "1" .. "0..*" Solicitud : contextualiza
+
+Solicitud "1" *-- "1..*" LineaSolicitud : contiene
+
+LineaSolicitud "*" --> "1" Producto : solicita
+
+CategoriaProducto "1" -- "0..*" Producto : clasifica
+
+UnidadMedida "1" -- "0..*" Producto : mide
+
+' ==========================================
+' RELACIONES DE INVENTARIO
+' ==========================================
+
+ONG "1" -- "0..*" Almacen : posee
+
+Almacen "1" -- "0..*" LoteStock : almacena
+
+LoteStock "*" --> "1" Producto : contiene
+
+LoteStock "1" -- "0..*" MovimientoStock : registra
+
+' ==========================================
+' RELACIONES DE MATCHING
+' ==========================================
+
+Solicitud "1" -- "0..*" PropuestaMatching : origina
+
+ONG "1" -- "0..*" PropuestaMatching : recibe
+
+PropuestaMatching "1" *-- "1..*" LineaPropuesta : contiene
+
+LineaPropuesta "*" --> "1" LineaSolicitud : atiende
+
+LineaPropuesta "*" --> "1" LoteStock : propone
+
+PropuestaMatching "1" -- "0..1" Autorizacion : autoriza
+
+' ==========================================
+' RELACIONES DE DESPACHO
+' ==========================================
+
+Autorizacion "1" -- "1..*" Despacho : habilita
+
+Despacho "1" *-- "1..*" LineaDespacho : contiene
+
+LineaPropuesta "1" -- "0..1" LineaDespacho : origina
+
+Despacho "*" --> "1" Almacen : recoge desde
+
+Despacho "*" --> "1" Comunidad : destino
+
+Brigada "1" -- "0..*" Despacho : atiende
+
+' ==========================================
+' RELACIONES DE RUTAS
+' ==========================================
+
+Despacho "1" -- "0..*" Ruta : evalua
+
+Ruta "1" *-- "0..*" SegmentoRuta : contiene
+
+SegmentoRuta "*" --> "1" TramoVial : utiliza
+
+' ==========================================
+' RELACIONES DE RECEPCIÓN
+' ==========================================
+
+Solicitud "1" -- "0..*" Recepcion : registra
+
+Despacho "1" -- "0..1" Recepcion : finaliza con
+
+Recepcion "1" *-- "1..*" LineaRecepcion : verifica
+
+LineaRecepcion "*" --> "1" LineaDespacho : contrasta
+
+LineaRecepcion "*" --> "1" LineaSolicitud : corresponde
+
+Recepcion "1" -- "0..1" Discrepancia : genera
+
+Despacho "1" -- "0..*" Documento : documenta
+
+Recepcion "1" -- "0..*" Documento : habilita
+
+' ==========================================
+' RELACIONES DE INFORME FINAL
+' ==========================================
+
+Emergencia "1" .. "0..1" InformeFinal : genera al cierre
+
+JefeDefensaCivil ..> InformeFinal : consulta
+
+' ==========================================
+' RELACIONES DE RIESGO
+' ==========================================
+
+Comunidad "1" -- "0..*" EvaluacionRiesgo : presenta
+
+EvaluacionRiesgo "*" --> "1" Fenomeno : corresponde
+
+EvaluacionRiesgo "*" --> "1" NivelRiesgo : clasificada en
+
+' ==========================================
+' REGLAS CONCEPTUALES
+' ==========================================
+
+note bottom of Usuario
+  Los cuatro jefes representan
+  roles conceptuales excluyentes.
+
+  La persistencia utiliza una
+  unica entidad Usuario con Role.
+
+  No existen tablas independientes
+  para cada especializacion.
+end note
+
+note bottom of Brigada
+  La brigada es una unidad
+  operativa conceptual.
+
+  El modelo actual de Identity
+  no define una tabla Brigada
+  ni su vinculacion persistente
+  con el usuario responsable.
+end note
+
+note bottom of PropuestaMatching
+  PROPOSED
+  CONFIRMED
+  REJECTED
+  AUTHORIZED
+
+  Generar o confirmar propuestas
+  no reserva inventario.
+
+  La autorizacion compromete
+  las cantidades confirmadas.
+end note
+
+note bottom of LoteStock
+  Disponible para autorizar =
+  fisico utilizable -
+  autorizado pendiente de retiro.
+
+  Las propuestas no reducen
+  el saldo disponible.
+
+  El retiro completo confirmado
+  descuenta existencias una vez.
+end note
+
+note bottom of Recepcion
+  CONFORMING
+  WITH_OBSERVATIONS
+
+  La llegada no equivale
+  a recepcion conforme.
+
+  Las diferencias se conservan
+  sin reactivar automaticamente
+  el matching.
+end note
+
+note bottom of EvaluacionRiesgo
+  La severidad corresponde
+  al catalogo NivelRiesgo.
+
+  El riesgo no disminuye
+  por entregar ayuda.
+
+  La fecha de evaluacion
+  determina su vigencia,
+  no la fecha de importacion.
+end note
+
+note bottom of Emergencia
+  Contexto preconfigurado.
+
+  El cierre se inicia mediante
+  EMERGENCIA_FINALIZADA.
+
+  No hay cierre manual
+  desde Defensa Civil.
+
+  Su persistencia concreta
+  requiere definicion.
+end note
+
+note bottom of InformeFinal
+  Informe unico e inmutable
+  por evento de cierre.
+
+  Se consulta solamente
+  despues de su publicacion.
+
+  La estructura de persistencia
+  todavia no esta definida.
+end note
+
+legend bottom
+  <|--  Especializacion conceptual de rol
+  *--   Composicion
+  --    Asociacion del dominio
+  ..    Relacion conceptual, no FK confirmada
+
+  Este diagrama no representa
+  claves foraneas fisicas entre modulos.
+endlegend
+
+@enduml

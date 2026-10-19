@@ -1,0 +1,248 @@
+
+@startuml
+title CU-ONG-01 | Registrar ingreso de donaciones — Alivía
+
+hide footbox
+autonumber
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 160
+skinparam BoxPadding 12
+
+' ==========================================
+' PARTICIPANTES
+' ==========================================
+
+actor "Jefe de\nONG" as U
+boundary "Frontend\nNext.js" as WEB
+control "API\nNestJS" as API
+control "Identity" as ID
+control "Inventory" as IN
+database "PostgreSQL" as DB
+queue "Evento interno /\ncola de matching" as EV
+
+' ==========================================
+' PRECONDICIÓN
+' ==========================================
+
+note over U, WEB
+  El usuario debe tener el rol ONG
+  y estar vinculado a una organización.
+
+  El almacén debe pertenecer
+  a esa ONG.
+
+  El producto debe existir
+  en el catálogo y estar activo.
+end note
+
+' ==========================================
+' REGISTRO DE DONACIÓN
+' ==========================================
+
+U -> WEB : Seleccionar almacén, producto,\nlote, cantidad y vencimiento
+
+U -> WEB : Confirmar ingreso de donaciones
+
+WEB -> API : POST /v1/ong/stocks/entries
+
+note right of WEB
+  Enviar almacén, producto,
+  cantidad, lote, vencimiento
+  cuando corresponda y
+  clave de idempotencia.
+end note
+
+API -> ID : Validar sesión, rol y ONG vinculada
+
+' ==========================================
+' CONTROL DE ACCESO
+' ==========================================
+
+alt Sesión ausente, inválida o expirada
+
+  ID --> API : Autenticación inválida
+  API --> WEB : HTTP 401
+  WEB --> U : Solicitar autenticación
+
+else Rol ajeno o ONG no vinculada
+
+  ID --> API : Acceso denegado
+  API --> WEB : HTTP 403
+  WEB --> U : Mostrar acceso denegado
+
+else Identidad autorizada
+
+  ID --> API : Usuario y ongId autorizados
+
+  API -> IN : Registrar ingreso\n(datos, usuario, ongId, clave)
+
+  ' ========================================
+  ' IDEMPOTENCIA
+  ' ========================================
+
+  IN -> DB : Consultar operation_key\ny operación previa
+  DB --> IN : Resultado existente o sin registro
+
+  alt Reintento idéntico ya confirmado
+
+    IN --> API : Resultado previamente registrado
+    API --> WEB : Resultado original del ingreso
+    WEB --> U : Mostrar ingreso ya confirmado
+
+  else Clave reutilizada con datos diferentes
+
+    IN --> API : Conflicto de idempotencia
+    API --> WEB : HTTP 409
+    WEB --> U : Rechazar operación incompatible
+
+  else Nueva operación
+
+    ' ======================================
+    ' VALIDACIONES DEL DOMINIO
+    ' ======================================
+
+    IN -> DB : Consultar almacén, producto,\nunidad y lote existente
+
+    DB --> IN : Datos vigentes del catálogo\ny existencia del almacén
+
+    IN -> IN : Validar titularidad del almacén
+
+    alt Almacén ajeno
+
+      IN --> API : Acceso no autorizado
+      API --> WEB : HTTP 403
+      WEB --> U : No permitir registrar ingreso
+
+    else Almacén inexistente
+
+      IN --> API : Recurso no encontrado
+      API --> WEB : HTTP 404
+      WEB --> U : Mostrar almacén no disponible
+
+    else Almacén propio
+
+      IN -> IN : Validar producto activo,\ncantidad, unidad, lote y vencimiento
+
+      note over IN
+        Comprobar:
+        - Cantidad positiva.
+        - Producto activo.
+        - Unidad compatible.
+        - Vencimiento cuando se exige.
+        - Identidad y coherencia del lote.
+
+        No convertir unidades
+        automáticamente.
+      end note
+
+      alt Datos inválidos o producto inactivo
+
+        IN --> API : Errores por campo
+        API --> WEB : HTTP 422
+        WEB --> U : Corregir datos del ingreso
+
+      else Lote existente incompatible
+
+        IN --> API : Conflicto de lote
+        API --> WEB : HTTP 409
+        WEB --> U : Informar incompatibilidad
+
+      else Ingreso admisible
+
+        ' ====================================
+        ' PERSISTENCIA ATÓMICA
+        ' ====================================
+
+        IN -> DB : Iniciar transacción y proteger\nexistencias afectadas
+
+        IN -> DB : Crear o incrementar stock físico\nen lote y almacén propios
+
+        IN -> DB : Registrar movimiento ENTRY,\nusuario, cantidad y fecha
+
+        IN -> DB : Persistir clave y resultado\nidempotente
+
+        alt Error durante la persistencia
+
+          DB --> IN : Operación fallida
+          IN -> DB : ROLLBACK
+
+          IN --> API : Ingreso no confirmado
+          API --> WEB : Error de operación
+          WEB --> U : No mostrar ingreso exitoso
+
+        else Operación persistida
+
+          DB --> IN : Stock y movimiento registrados
+
+          IN -> DB : COMMIT
+          DB --> IN : Confirmación persistida
+
+          ' ==================================
+          ' RESULTADO
+          ' ==================================
+
+          IN --> API : Ingreso confirmado,\nstock físico y disponible
+
+          API --> WEB : HTTP 201 + ingreso registrado
+
+          WEB --> U : Mostrar movimiento y\nnuevo saldo de inventario
+
+          ' ==================================
+          ' MATCHING ASÍNCRONO
+          ' ==================================
+
+          IN ->> EV : InventarioDisponibleActualizado
+
+          note over IN, EV
+            El ingreso puede habilitar
+            una nueva evaluación
+            automática de matching.
+
+            Publicar o procesar el evento
+            no forma parte de la
+            confirmación interactiva.
+
+            Su recuperación ante fallos
+            debe estar garantizada.
+          end note
+
+        end
+
+      end
+
+    end
+
+  end
+
+end
+
+' ==========================================
+' POSCONDICIÓN
+' ==========================================
+
+note over IN, DB
+  Un ingreso confirmado conserva:
+  - Almacén y producto de la ONG.
+  - Lote y vencimiento aplicable.
+  - Incremento físico una sola vez.
+  - Movimiento ENTRY trazable.
+  - Usuario y fecha del servidor.
+  - Resultado idempotente.
+
+  Disponible = físico utilizable
+    menos autorizado pendiente de retiro.
+
+  No crea autorizaciones de salida
+  ni descuenta inventario.
+
+  El matching posterior no compromete
+  existencias al generar propuestas.
+end note
+
+@enduml

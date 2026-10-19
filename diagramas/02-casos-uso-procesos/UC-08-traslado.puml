@@ -1,0 +1,89 @@
+
+@startuml
+title UC-08 | Ruta, retiro y llegada — Alivía
+
+left to right direction
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam packageStyle rectangle
+skinparam nodesep 45
+skinparam ranksep 55
+skinparam roundCorner 8
+
+' ==========================================
+' ACTOR
+' ==========================================
+
+actor "Jefe de\nBrigada" as BRI
+
+' ==========================================
+' CASOS DE USO
+' ==========================================
+
+rectangle "Alivía — Ruta, retiro y llegada" {
+
+  usecase "CU-BRI-01\nConsultar despachos\nautorizados" as BRI01
+
+  usecase "CU-BRI-02\nConsultar ruta\nde despacho" as BRI02
+
+  usecase "CU-BRI-03\nRegistrar llegada\nal destino" as BRI03
+
+  usecase "CU-BRI-04\nVerificar y confirmar\nretiro completo" as BRI04
+
+  usecase "Comprobar ruta\ndisponible y vigente" as RUTA
+
+}
+
+' ==========================================
+' ASOCIACIONES
+' ==========================================
+
+BRI -- BRI01
+BRI -- BRI02
+BRI -- BRI03
+BRI -- BRI04
+
+' ==========================================
+' RELACIONES UML
+' ==========================================
+
+' La ruta debe comprobarse al confirmar
+' el retiro, aunque se haya consultado antes.
+BRI04 ..> RUTA : <<include>>
+
+' ==========================================
+' REGLAS PRINCIPALES
+' ==========================================
+
+legend bottom
+  Reglas funcionales:
+
+  - La Brigada solo consulta y opera
+    despachos autorizados y asignados.
+  - La consulta de ruta presenta
+    recorrido, estado y fecha de verificación.
+  - El retiro requiere una ruta AVAILABLE,
+    verificada hace menos de 30 minutos,
+    sin tramos UNKNOWN o IMPASSABLE.
+  - Una ruta vencida o no disponible
+    bloquea la confirmación del retiro.
+  - La carga física debe coincidir
+    íntegramente con lo autorizado.
+    No se permiten retiros parciales.
+  - Confirmar el retiro descuenta
+    el inventario físico una sola vez.
+  - Registrar llegada requiere
+    un retiro completo previo.
+  - La llegada habilita la recepción
+    por Comuna, pero no acredita conformidad.
+  - Los reintentos no duplican
+    retiros, descuentos ni llegadas.
+  - No se contempla la gestión
+    de transportistas o flotas.
+endlegend
+
+@enduml

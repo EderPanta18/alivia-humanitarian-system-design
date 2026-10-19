@@ -1,0 +1,270 @@
+
+@startuml
+title CU-ONG-03 | Registrar ajuste de inventario — Alivía
+
+hide footbox
+autonumber
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 160
+skinparam BoxPadding 12
+
+' ==========================================
+' PARTICIPANTES
+' ==========================================
+
+actor "Jefe de\nONG" as U
+boundary "Frontend\nNext.js" as WEB
+control "API\nNestJS" as API
+control "Identity" as ID
+control "Inventory" as IN
+database "PostgreSQL" as DB
+queue "Evento interno /\ncola de matching" as EV
+
+' ==========================================
+' PRECONDICIÓN
+' ==========================================
+
+note over U, WEB
+  El usuario debe tener el rol ONG
+  y estar vinculado a su organización.
+
+  El lote debe pertenecer
+  a un almacén de esa ONG.
+
+  El ajuste requiere cantidad
+  de variación y motivo.
+end note
+
+' ==========================================
+' SOLICITUD DE AJUSTE
+' ==========================================
+
+U -> WEB : Seleccionar lote, variación y motivo
+
+WEB --> U : Mostrar cantidad actual\ny resultado previsto
+
+U -> WEB : Confirmar ajuste
+
+WEB -> API : POST /v1/ong/stocks/adjustments
+
+note right of WEB
+  Enviar lote, variación,
+  motivo y clave de idempotencia.
+
+  La variación puede ser
+  positiva o negativa.
+end note
+
+API -> ID : Validar sesión, rol y ONG vinculada
+
+' ==========================================
+' CONTROL DE ACCESO
+' ==========================================
+
+alt Sesión ausente, inválida o expirada
+
+  ID --> API : Autenticación inválida
+  API --> WEB : HTTP 401
+  WEB --> U : Solicitar autenticación
+
+else Rol ajeno o ONG no vinculada
+
+  ID --> API : Acceso denegado
+  API --> WEB : HTTP 403
+  WEB --> U : Mostrar acceso denegado
+
+else Identidad autorizada
+
+  ID --> API : Usuario y ongId autorizados
+
+  API -> IN : Registrar ajuste de inventario
+
+  ' ========================================
+  ' IDEMPOTENCIA
+  ' ========================================
+
+  IN -> DB : Consultar operación previa\npor clave y usuario
+
+  DB --> IN : Resultado existente o sin registro
+
+  alt Reintento idéntico ya confirmado
+
+    IN --> API : Resultado previamente persistido
+    API --> WEB : Resultado original
+    WEB --> U : Mostrar ajuste ya registrado
+
+  else Clave reutilizada con datos diferentes
+
+    IN --> API : Conflicto de idempotencia
+    API --> WEB : HTTP 409
+    WEB --> U : Rechazar operación incompatible
+
+  else Nueva operación
+
+    ' ======================================
+    ' VALIDACIÓN DE TITULARIDAD
+    ' ======================================
+
+    IN -> DB : Consultar lote y almacén\nlimitados a ongId
+
+    DB --> IN : Lote propio o sin resultado
+
+    alt Lote inexistente o ajeno
+
+      IN --> API : Recurso no accesible
+      API --> WEB : HTTP 404
+      WEB --> U : No permitir ajustar el lote
+
+    else Lote perteneciente a la ONG
+
+      ' ====================================
+      ' VALIDACIÓN DE ENTRADA
+      ' ====================================
+
+      IN -> IN : Validar variación, unidad y motivo
+
+      alt Variación nula, inválida o sin motivo
+
+        IN --> API : Errores por campo
+        API --> WEB : HTTP 422
+        WEB --> U : Corregir datos del ajuste
+
+      else Datos válidos
+
+        ' ==================================
+        ' CONTROL TRANSACCIONAL
+        ' ==================================
+
+        IN -> DB : Iniciar transacción y bloquear\nexistencias afectadas
+
+        IN -> DB : Releer físico y autorizaciones\npendientes de retiro
+
+        DB --> IN : Cantidades vigentes del lote
+
+        IN -> IN : Calcular físico resultante\ny disponibilidad posterior
+
+        note over IN
+          Físico resultante =
+          físico actual + variación.
+
+          El resultado debe ser:
+          - No negativo.
+          - No inferior a los compromisos
+            autorizados pendientes de retiro.
+
+          Los lotes no utilizables
+          no aportan disponibilidad.
+        end note
+
+        alt Ajuste afecta compromisos vigentes
+
+          IN -> DB : ROLLBACK
+
+          IN --> API : Conflicto de existencias
+          API --> WEB : HTTP 409
+          WEB --> U : Mostrar ajuste bloqueado\ny compromiso pendiente
+
+        else Ajuste permitido
+
+          ' ================================
+          ' PERSISTENCIA ATÓMICA
+          ' ================================
+
+          IN -> DB : Actualizar existencia física\ndel lote
+
+          IN -> DB : Registrar movimiento ADJUSTMENT,\nvariación, motivo y responsable
+
+          IN -> DB : Persistir clave y resultado\nidempotente
+
+          alt Error de persistencia
+
+            DB --> IN : Operación fallida
+            IN -> DB : ROLLBACK
+
+            IN --> API : Ajuste no confirmado
+            API --> WEB : Error de operación
+            WEB --> U : No mostrar éxito
+
+          else Escrituras correctas
+
+            DB --> IN : Existencia y movimiento guardados
+
+            IN -> DB : COMMIT
+
+            alt Confirmación persistida
+
+              DB --> IN : COMMIT confirmado
+
+              IN --> API : Ajuste, saldo físico\ny disponibilidad actualizada
+
+              API --> WEB : HTTP 200 + ajuste registrado
+
+              WEB --> U : Mostrar existencias corregidas\ny movimiento de ajuste
+
+              ' ============================
+              ' ACTUALIZACIÓN DE MATCHING
+              ' ============================
+
+              IN ->> EV : InventarioDisponibleActualizado
+
+              note over IN, EV
+                El cambio de existencias
+                puede requerir reevaluar
+                propuestas y necesidades.
+
+                El procesamiento es asíncrono
+                y debe ser recuperable.
+
+                No altera autorizaciones
+                válidas ni crea compromisos
+                por sí mismo.
+              end note
+
+            else Confirmación no verificable
+
+              DB --> IN : Resultado incierto
+              IN --> API : Operación pendiente de verificar
+              API --> WEB : No se puede acreditar éxito
+              WEB --> U : Consultar estado antes\nde repetir el ajuste
+
+            end
+
+          end
+
+        end
+
+      end
+
+    end
+
+  end
+
+end
+
+' ==========================================
+' POSCONDICIÓN
+' ==========================================
+
+note over IN, DB
+  Un ajuste confirmado conserva:
+
+  - Existencia física corregida.
+  - Movimiento ADJUSTMENT único.
+  - Variación y motivo registrados.
+  - Usuario y fecha del servidor.
+  - Compromisos autorizados intactos.
+  - Resultado idempotente persistido.
+
+  No sobrescribe movimientos anteriores.
+
+  No realiza devoluciones físicas,
+  retiros ni autorizaciones de salida.
+end note
+
+@enduml

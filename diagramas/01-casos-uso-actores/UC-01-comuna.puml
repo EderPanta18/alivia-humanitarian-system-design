@@ -1,0 +1,86 @@
+
+@startuml
+title UC-01 | Casos de uso del Jefe de Comuna — Alivía
+
+left to right direction
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam packageStyle rectangle
+skinparam nodesep 45
+skinparam ranksep 55
+skinparam roundCorner 8
+
+' ==========================================
+' ACTOR
+' ==========================================
+
+actor "Jefe de\nComuna" as COM
+
+' ==========================================
+' CASOS DE USO
+' ==========================================
+
+rectangle "Alivía — Solicitudes y recepción" {
+
+  usecase "CU-COM-01\nRegistrar solicitud\nde ayuda" as COM01
+
+  usecase "CU-COM-02\nConsultar estado\nde solicitud" as COM02
+
+  usecase "CU-COM-03\nConfirmar recepción\nde ayuda" as COM03
+
+  usecase "CU-COM-04\nRegistrar recepción\ncon discrepancias" as COM04
+
+}
+
+' ==========================================
+' ASOCIACIONES
+' ==========================================
+
+COM -- COM01
+COM -- COM02
+COM -- COM03
+
+' ==========================================
+' RELACIONES UML
+' ==========================================
+
+' Variante condicional de la recepción.
+COM04 ..> COM03 : <<extend>>
+
+' ==========================================
+' REGLAS PRINCIPALES
+' ==========================================
+
+legend bottom
+  Reglas funcionales:
+
+  - La Comuna solo administra solicitudes
+    y recepciones de su propia comunidad.
+  - Una solicitud confirmada no puede
+    editarse ni cancelarse por Comuna.
+  - Confirmar una solicitud habilita el
+    matching, sin comprometer inventario.
+  - La consulta distingue cantidades
+    solicitadas, sin cobertura, comprometidas
+    y recibidas conformes.
+  - La recepción requiere un despacho propio
+    con llegada previamente registrada.
+  - Por cada línea se valida:
+    0 <= conforme <= recibida <= enviada.
+  - Los productos dañados se consideran
+    recibidos, pero no conformes.
+  - Las discrepancias permiten finalizar
+    como WITH_OBSERVATIONS y no reactivan
+    automáticamente el matching.
+  - Cada despacho tiene una única recepción
+    finalizada. Después se generan el
+    manifiesto XLSX y el acta PDF.
+  - Un fallo al generar documentos no
+    revierte la recepción confirmada.
+endlegend
+
+@enduml

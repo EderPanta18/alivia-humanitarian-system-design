@@ -1,0 +1,185 @@
+
+@startuml
+title CU-DC-01 | Consultar riesgo territorial y alertas recientes — Alivía
+
+hide footbox
+autonumber
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam monochrome true
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 160
+skinparam BoxPadding 12
+
+' ==========================================
+' PARTICIPANTES
+' ==========================================
+
+actor "Jefe de\nDefensa Civil" as U
+boundary "Frontend\nNext.js" as WEB
+control "API\nNestJS" as API
+control "Identity" as ID
+control "Consulta de\nsupervisión" as CO
+control "Territory" as TE
+database "PostgreSQL" as DB
+
+' ==========================================
+' PRECONDICIÓN
+' ==========================================
+
+note over U, WEB
+  El usuario debe contar con el rol
+  defensaCivil y una sesión válida.
+
+  Las evaluaciones y observaciones
+  provienen de información previamente
+  incorporada o configurada.
+
+  La consulta es de solo lectura.
+end note
+
+' ==========================================
+' CONSULTA TERRITORIAL
+' ==========================================
+
+U -> WEB : Abrir mapa y seleccionar filtros
+WEB -> API : GET /v1/supervision/territory
+
+note right of WEB
+  Filtros de consulta:
+  comunidad o zona, fenómeno,
+  fuente y fecha.
+end note
+
+API -> ID : Validar sesión y rol defensaCivil
+
+' ==========================================
+' CONTROL DE ACCESO
+' ==========================================
+
+alt Sesión ausente, inválida o expirada
+
+  ID --> API : Autenticación inválida
+  API --> WEB : HTTP 401
+  WEB --> U : Solicitar autenticación
+
+else Rol diferente de defensaCivil
+
+  ID --> API : Acceso denegado
+  API --> WEB : HTTP 403
+  WEB --> U : Mostrar acceso denegado
+
+else Consulta autorizada
+
+  ID --> API : Rol defensaCivil validado
+
+  API -> CO : Consultar panorama territorial
+
+  ' ========================================
+  ' EVALUACIONES DE RIESGO
+  ' ========================================
+
+  CO -> TE : Consultar evaluaciones por\ncomunidad, fenómeno y fecha
+
+  TE -> DB : Leer evaluaciones históricas,\ncatástrofes y niveles de riesgo
+
+  alt Error de consulta territorial
+
+    DB --> TE : Error de lectura
+    TE --> CO : Consulta fallida
+    CO --> API : Información no recuperable
+    API --> WEB : Error de consulta
+    WEB --> U : Mostrar error sin inventar datos
+
+  else Consulta territorial completada
+
+    DB --> TE : Evaluaciones, nivel,\nfuente y fechas
+
+    TE -> TE : Identificar evaluación aplicable\nsegún fecha y procedencia
+
+    TE --> CO : Riesgo territorial y antigüedad
+
+    ' ======================================
+    ' OBSERVACIONES Y ALERTAS RECIENTES
+    ' ======================================
+
+    opt Consulta de observaciones y alertas integradas
+
+      CO -> TE : Consultar avisos recientes disponibles
+
+      note over CO, TE
+        Integración lógica prevista por RF-39.
+
+        La interfaz y persistencia
+        específicas de las alertas
+        aún requieren definición.
+
+        No confundir avisos importados
+        con evaluaciones verificadas.
+      end note
+
+      TE --> CO : Avisos disponibles con\nfuente, fecha y condición conocida
+
+    end
+
+    ' ======================================
+    ' CONSOLIDACIÓN DE LA CONSULTA
+    ' ======================================
+
+    CO -> CO : Organizar información territorial\nsin mezclar riesgo y atención
+
+    note over CO
+      Conservar:
+      - Fenómeno y ubicación.
+      - Nivel evaluado, si existe.
+      - Fuente y fecha de evaluación.
+      - Fecha de incorporación.
+      - Origen y verificación de avisos,
+        cuando esos datos estén disponibles.
+
+      No presentar incertidumbre
+      como certeza confirmada.
+    end note
+
+    alt Sin evaluaciones ni avisos disponibles
+
+      CO --> API : Consulta sin resultados
+      API --> WEB : HTTP 200 + resultado vacío
+      WEB --> U : Mostrar ausencia de datos
+
+    else Existen datos territoriales disponibles
+
+      CO --> API : Evaluaciones y avisos disponibles
+      API --> WEB : HTTP 200 + panorama territorial
+
+      WEB --> U : Mostrar mapa, niveles,\nfuentes y fechas
+
+      WEB --> U : Distinguir observaciones,\nestimaciones y datos no verificados
+
+    end
+
+  end
+
+end
+
+' ==========================================
+' POSCONDICIÓN
+' ==========================================
+
+note over CO, DB
+  Consulta exclusivamente informativa.
+
+  Las alertas externas no declaran
+  ni activan emergencias automáticamente.
+
+  La recepción de ayuda no modifica
+  el nivel de riesgo territorial.
+
+  No se alteran evaluaciones,
+  solicitudes, despachos ni inventario.
+end note
+
+@enduml
