@@ -1,0 +1,447 @@
+
+@startuml
+title Alivía — Modelo relacional de la base de datos
+
+!pragma layout smetana
+hide circle
+
+skinparam backgroundColor white
+skinparam defaultFontName Arial
+skinparam shadowing false
+skinparam linetype ortho
+skinparam packageStyle rectangle
+skinparam nodesep 35
+skinparam ranksep 60
+
+skinparam entity {
+    BackgroundColor white
+    BorderColor #475569
+    FontColor #172033
+}
+
+skinparam package {
+    BorderColor #64748B
+    FontColor #172033
+    FontStyle bold
+}
+
+package "Identidad" #EAF2FF {
+
+    entity "ONG" as i_ong {
+        * id : UUID <<PK>>
+        --
+        nombre : VARCHAR
+        contacto : VARCHAR
+        activa : BOOLEAN
+    }
+
+    entity "Brigada" as i_brigada {
+        * id : UUID <<PK>>
+        --
+        nombre : VARCHAR
+        activa : BOOLEAN
+    }
+
+    entity "Usuario" as i_usuario {
+        * id : UUID <<PK>>
+        --
+        ong_id : UUID <<FK, UK>>
+        brigada_id : UUID <<FK, UK>>
+        comunidad_id : UUID <<LOGICO, UK>>
+        rol : Rol
+        nombre : VARCHAR
+        correo : VARCHAR <<UK>>
+        contrasena_hash : VARCHAR
+        activo : BOOLEAN
+    }
+
+    entity "Evento de auditoría" as i_auditoria {
+        * id : UUID <<PK>>
+        --
+        usuario_actor_id : UUID <<FK>>
+        rol_actor : VARCHAR
+        tipo_entidad : VARCHAR
+        entidad_id : UUID
+        tipo_objeto : VARCHAR
+        objeto_id : UUID
+        accion : VARCHAR
+        clave_operacion : VARCHAR <<UK>>
+        resumen_cambios : JSONB
+        fecha_evento : TIMESTAMPTZ
+    }
+
+    i_ong ||--o| i_usuario : dirige
+    i_brigada ||--o| i_usuario : dirige
+    i_usuario ||--o{ i_auditoria : ejecuta
+}
+
+package "Refugio y atención comunitaria" #ECFDF3 {
+
+    entity "Distrito" as s_distrito {
+        * id : UUID <<PK>>
+        --
+        ubigeo : VARCHAR(6) <<UK>>
+        nombre : VARCHAR
+        activo : BOOLEAN
+    }
+
+    entity "Comunidad" as s_comunidad {
+        * id : UUID <<PK>>
+        --
+        distrito_id : UUID <<FK>>
+        nombre : VARCHAR
+        tipo : ENUM
+        latitud : DECIMAL
+        longitud : DECIMAL
+    }
+
+    entity "Emergencia" as s_emergencia {
+        * id : UUID <<PK>>
+        --
+        nombre : VARCHAR
+        estado : ENUM
+        fecha_activacion : TIMESTAMPTZ
+        fecha_finalizacion : TIMESTAMPTZ
+    }
+
+    entity "Solicitud" as s_solicitud {
+        * id : UUID <<PK>>
+        --
+        comunidad_id : UUID <<FK>>
+        emergencia_id : UUID <<FK>>
+        usuario_creador_id : UUID <<LOGICO>>
+        poblacion_afectada : INTEGER
+        situacion : TEXT
+        estado : ENUM
+        fecha_confirmacion : TIMESTAMPTZ
+    }
+
+    entity "Detalle de solicitud" as s_detalle_solicitud {
+        * id : UUID <<PK>>
+        --
+        solicitud_id : UUID <<FK>>
+        producto_id : UUID <<LOGICO>>
+        cantidad_solicitada : NUMERIC(18,3)
+        --
+        UNICO(solicitud_id, producto_id)
+    }
+
+    entity "Recepción" as s_recepcion {
+        * id : UUID <<PK>>
+        --
+        solicitud_id : UUID <<FK>>
+        despacho_id : UUID <<UK, LOGICO>>
+        usuario_confirmador_id : UUID <<LOGICO>>
+        resultado : ENUM
+        observaciones : TEXT
+        fecha_confirmacion : TIMESTAMPTZ
+    }
+
+    entity "Detalle de recepción" as s_detalle_recepcion {
+        * id : UUID <<PK>>
+        --
+        recepcion_id : UUID <<FK>>
+        detalle_solicitud_id : UUID <<FK>>
+        detalle_despacho_id : UUID <<UK, LOGICO>>
+        cantidad_recibida : NUMERIC(18,3)
+        cantidad_conforme : NUMERIC(18,3)
+        cantidad_faltante : NUMERIC(18,3)
+    }
+
+    entity "Informe de discrepancias" as s_discrepancia {
+        * id : UUID <<PK>>
+        --
+        recepcion_id : UUID <<FK, UK>>
+        descripcion : TEXT
+        fecha_creacion : TIMESTAMPTZ
+    }
+
+    entity "Informe final" as s_informe_final {
+        * id : UUID <<PK>>
+        --
+        emergencia_id : UUID <<FK, UK>>
+        clave_operacion : VARCHAR <<UK>>
+        instantanea : JSONB
+        fecha_generacion : TIMESTAMPTZ
+    }
+
+    s_distrito ||--o{ s_comunidad : contiene
+    s_comunidad ||--o{ s_solicitud : registra
+    s_emergencia ||--o{ s_solicitud : agrupa
+    s_emergencia ||--o| s_informe_final : genera
+
+    s_solicitud ||--|{ s_detalle_solicitud : incluye
+    s_solicitud ||--o{ s_recepcion : recibe
+    s_recepcion ||--|{ s_detalle_recepcion : contiene
+    s_detalle_solicitud ||--o{ s_detalle_recepcion : corresponde
+    s_recepcion ||--o| s_discrepancia : registra
+}
+
+package "Inventario" #FFF7E6 {
+
+    entity "Categoría" as v_categoria {
+        * id : UUID <<PK>>
+        --
+        codigo : VARCHAR <<UK>>
+        nombre : VARCHAR
+        criticidad : NUMERIC
+        activa : BOOLEAN
+    }
+
+    entity "Unidad de medida" as v_unidad {
+        * id : UUID <<PK>>
+        --
+        codigo : VARCHAR <<UK>>
+        simbolo : VARCHAR
+        nombre : VARCHAR
+        activa : BOOLEAN
+    }
+
+    entity "Producto" as v_producto {
+        * id : UUID <<PK>>
+        --
+        categoria_id : UUID <<FK>>
+        unidad_medida_id : UUID <<FK>>
+        codigo : VARCHAR <<UK>>
+        nombre : VARCHAR
+        multiplo_entrega : NUMERIC(18,3)
+        requiere_vencimiento : BOOLEAN
+        activo : BOOLEAN
+    }
+
+    entity "Almacén" as v_almacen {
+        * id : UUID <<PK>>
+        --
+        ong_id : UUID <<LOGICO>>
+        nombre : VARCHAR
+        direccion : TEXT
+        latitud : DECIMAL
+        longitud : DECIMAL
+    }
+
+    entity "Existencia por lote" as v_existencia {
+        * id : UUID <<PK>>
+        --
+        almacen_id : UUID <<FK>>
+        producto_id : UUID <<FK>>
+        codigo_lote : VARCHAR
+        cantidad_fisica : NUMERIC(18,3)
+        fecha_vencimiento : DATE
+        fecha_ingreso : TIMESTAMPTZ
+        estado : ENUM
+        --
+        UNICO(almacen_id, producto_id, codigo_lote)
+    }
+
+    entity "Movimiento de inventario" as v_movimiento {
+        * id : UUID <<PK>>
+        --
+        existencia_id : UUID <<FK>>
+        usuario_actor_id : UUID <<LOGICO>>
+        despacho_id : UUID <<LOGICO>>
+        clave_operacion : VARCHAR <<UK>>
+        tipo : ENUM
+        variacion_cantidad : NUMERIC(18,3)
+        fecha_creacion : TIMESTAMPTZ
+    }
+
+    entity "Propuesta de asignación" as v_propuesta {
+        * id : UUID <<PK>>
+        --
+        solicitud_id : UUID <<LOGICO>>
+        ong_id : UUID <<LOGICO>>
+        usuario_confirmador_id : UUID <<LOGICO>>
+        estado : ENUM
+        motivo_rechazo : TEXT
+        fecha_creacion : TIMESTAMPTZ
+        fecha_confirmacion : TIMESTAMPTZ
+    }
+
+    entity "Detalle de propuesta" as v_detalle_propuesta {
+        * id : UUID <<PK>>
+        --
+        propuesta_id : UUID <<FK>>
+        existencia_id : UUID <<FK>>
+        detalle_solicitud_id : UUID <<LOGICO>>
+        cantidad_propuesta : NUMERIC(18,3)
+        cantidad_confirmada : NUMERIC(18,3)
+        puntuacion_prioridad : NUMERIC
+    }
+
+    entity "Autorización" as v_autorizacion {
+        * id : UUID <<PK>>
+        --
+        propuesta_id : UUID <<FK, UK>>
+        usuario_autorizador_id : UUID <<LOGICO>>
+        clave_operacion : VARCHAR <<UK>>
+        fecha_autorizacion : TIMESTAMPTZ
+    }
+
+    v_categoria ||--o{ v_producto : clasifica
+    v_unidad ||--o{ v_producto : mide
+
+    v_almacen ||--o{ v_existencia : almacena
+    v_producto ||--o{ v_existencia : identifica
+
+    v_existencia ||--o{ v_movimiento : registra
+    v_existencia ||--o{ v_detalle_propuesta : aporta
+
+    v_propuesta ||--|{ v_detalle_propuesta : contiene
+    v_propuesta ||--o| v_autorizacion : autoriza
+}
+
+package "Logística" #F3EEFF {
+
+    entity "Despacho" as l_despacho {
+        * id : UUID <<PK>>
+        --
+        autorizacion_id : UUID <<LOGICO>>
+        almacen_id : UUID <<LOGICO>>
+        comunidad_id : UUID <<LOGICO>>
+        usuario_brigada_id : UUID <<LOGICO>>
+        estado : ENUM
+        fecha_retiro : TIMESTAMPTZ
+        fecha_llegada : TIMESTAMPTZ
+    }
+
+    entity "Detalle de despacho" as l_detalle_despacho {
+        * id : UUID <<PK>>
+        --
+        despacho_id : UUID <<FK>>
+        detalle_propuesta_id : UUID <<UK, LOGICO>>
+        cantidad_autorizada : NUMERIC(18,3)
+        cantidad_retirada : NUMERIC(18,3)
+    }
+
+    entity "Ruta" as l_ruta {
+        * id : UUID <<PK>>
+        --
+        despacho_id : UUID <<FK>>
+        proveedor_mapa : VARCHAR
+        estado : ENUM
+        trazado : JSONB
+        distancia_km : DECIMAL
+        duracion_estimada_minutos : INTEGER
+        fecha_calculo : TIMESTAMPTZ
+        fecha_verificacion : TIMESTAMPTZ
+    }
+
+    entity "Carretera" as l_carretera {
+        * id : UUID <<PK>>
+        --
+        nombre : VARCHAR
+        geometria : JSONB
+        estado : ENUM
+        fuente : VARCHAR
+        fecha_actualizacion : TIMESTAMPTZ
+    }
+
+    entity "Tramo de ruta" as l_tramo {
+        * id : UUID <<PK>>
+        --
+        ruta_id : UUID <<FK>>
+        carretera_id : UUID <<FK>>
+        secuencia : INTEGER
+        --
+        UNICO(ruta_id, secuencia)
+    }
+
+    entity "Documento" as l_documento {
+        * id : UUID <<PK>>
+        --
+        despacho_id : UUID <<FK>>
+        recepcion_id : UUID <<LOGICO>>
+        tipo : ENUM
+        ubicacion_archivo : TEXT
+        suma_verificacion : VARCHAR
+        fecha_generacion : TIMESTAMPTZ
+        --
+        UNICO(despacho_id, tipo)
+    }
+
+    l_despacho ||--|{ l_detalle_despacho : contiene
+    l_despacho ||--o{ l_ruta : evalua
+
+    l_ruta ||--o{ l_tramo : recorre
+    l_carretera ||--o{ l_tramo : compone
+
+    l_despacho ||--o{ l_documento : genera
+}
+
+package "Territorio" #E9F8FA {
+
+    entity "Tipo de desastre" as t_desastre {
+        * id : UUID <<PK>>
+        --
+        codigo : VARCHAR <<UK>>
+        nombre : VARCHAR
+        descripcion : TEXT
+        activo : BOOLEAN
+    }
+
+    entity "Nivel de desastre" as t_nivel {
+        * id : UUID <<PK>>
+        --
+        codigo : VARCHAR <<UK>>
+        nombre : VARCHAR
+        orden_severidad : INTEGER <<UK>>
+        color_hexadecimal : VARCHAR
+        descripcion : TEXT
+        activo : BOOLEAN
+    }
+
+    entity "Observación externa" as t_observacion {
+        * id : UUID <<PK>>
+        --
+        fuente : VARCHAR
+        identificador_externo : VARCHAR
+        fenomeno : VARCHAR
+        certeza : ENUM
+        datos_originales : JSONB
+        fecha_observacion : TIMESTAMPTZ
+        fecha_ingesta : TIMESTAMPTZ
+        --
+        UNICO(fuente, identificador_externo)
+    }
+
+    entity "Evaluación de riesgo" as t_riesgo {
+        * id : UUID <<PK>>
+        --
+        desastre_id : UUID <<FK>>
+        nivel_desastre_id : UUID <<FK>>
+        comunidad_id : UUID <<LOGICO>>
+        observacion_id : UUID <<FK>>
+        fuente : VARCHAR
+        fecha_evaluacion : TIMESTAMPTZ
+        fecha_importacion : TIMESTAMPTZ
+    }
+
+    t_desastre ||--o{ t_riesgo : identifica
+    t_nivel ||--o{ t_riesgo : clasifica
+    t_observacion ||--o{ t_riesgo : sustenta
+}
+
+' Relaciones lógicas entre módulos
+
+i_ong ||..o{ v_almacen : posee
+i_ong ||..o{ v_propuesta : participa
+s_comunidad ||..o| i_usuario : tiene_jefe
+
+s_solicitud ||..o{ v_propuesta : origina
+s_detalle_solicitud ||..o{ v_detalle_propuesta : requiere
+v_producto ||..o{ s_detalle_solicitud : solicitado
+
+v_autorizacion ||..o{ l_despacho : genera
+v_almacen ||..o{ l_despacho : origina
+v_detalle_propuesta ||..o| l_detalle_despacho : asigna
+
+i_usuario ||..o{ l_despacho : responsable
+s_comunidad ||..o{ l_despacho : destinataria
+
+l_despacho ||..o| s_recepcion : verifica
+l_detalle_despacho ||..o| s_detalle_recepcion : comprueba
+s_recepcion ||..o{ l_documento : documenta
+
+s_comunidad ||..o{ t_riesgo : presenta
+
+@enduml
